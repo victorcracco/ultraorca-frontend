@@ -1,17 +1,36 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../services/supabase";
 
+// Ícone de Check simples e seguro (SVG interno para evitar dependências quebradas)
+const CheckIcon = () => (
+  <svg 
+    className="w-5 h-5 text-green-500 flex-shrink-0" 
+    fill="none" 
+    stroke="currentColor" 
+    viewBox="0 0 24 24"
+  >
+    <path 
+      strokeLinecap="round" 
+      strokeLinejoin="round" 
+      strokeWidth="2" 
+      d="M5 13l4 4L19 7" 
+    />
+  </svg>
+);
+
 export default function Subscription() {
   const [loading, setLoading] = useState(false);
   const [userData, setUserData] = useState({ name: "", cpf: "" });
 
-  // Tenta preencher o nome automaticamente se o usuário já tiver cadastrado
+  // Tenta preencher o nome automaticamente
   useEffect(() => {
     async function loadUser() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        // Pega o nome do metadata ou do perfil (se tiver)
-        setUserData(prev => ({ ...prev, name: user.user_metadata.full_name || "" }));
+        setUserData(prev => ({ 
+          ...prev, 
+          name: user.user_metadata?.full_name || "" 
+        }));
       }
     }
     loadUser();
@@ -26,16 +45,13 @@ export default function Subscription() {
     setLoading(true);
 
     try {
-      // Chama nossa API na Vercel (o arquivo que acabamos de criar)
       const response = await fetch('/api/create-payment', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customerName: userData.name,
           customerCpf: userData.cpf,
-          value: 29.90 // Valor do plano
+          value: 29.90
         })
       });
 
@@ -45,7 +61,6 @@ export default function Subscription() {
         throw new Error(data.error || "Erro ao gerar pagamento");
       }
 
-      // Se deu certo, redireciona o usuário para o link de pagamento do Asaas
       if (data.invoiceUrl) {
         window.location.href = data.invoiceUrl;
       } else {
@@ -67,25 +82,37 @@ export default function Subscription() {
         {/* Lado Esquerdo: Benefícios */}
         <div className="space-y-6">
           <div>
-            <h1 className="text-4xl font-extrabold text-gray-900 mb-2">Seja <span className="text-blue-600">PRO</span></h1>
-            <p className="text-lg text-gray-600">Desbloqueie todo o poder do UltraOrça e profissionalize seu negócio.</p>
+            <h1 className="text-4xl font-extrabold text-gray-900 mb-2">
+              Seja <span className="text-blue-600">PRO</span>
+            </h1>
+            <p className="text-lg text-gray-600">
+              Desbloqueie todo o poder do sistema e profissionalize seu negócio.
+            </p>
           </div>
 
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="bg-green-100 p-2 rounded-full text-green-600">✓</div>
+              <div className="bg-green-100 p-2 rounded-full">
+                <CheckIcon />
+              </div>
               <span className="text-gray-700 font-medium">Orçamentos Ilimitados</span>
             </div>
             <div className="flex items-center gap-3">
-              <div className="bg-green-100 p-2 rounded-full text-green-600">✓</div>
+              <div className="bg-green-100 p-2 rounded-full">
+                 <CheckIcon />
+              </div>
               <span className="text-gray-700 font-medium">Sua Logo nos PDFs</span>
             </div>
             <div className="flex items-center gap-3">
-              <div className="bg-green-100 p-2 rounded-full text-green-600">✓</div>
+              <div className="bg-green-100 p-2 rounded-full">
+                 <CheckIcon />
+              </div>
               <span className="text-gray-700 font-medium">Gestão de Clientes e Histórico</span>
             </div>
             <div className="flex items-center gap-3">
-              <div className="bg-green-100 p-2 rounded-full text-green-600">✓</div>
+              <div className="bg-green-100 p-2 rounded-full">
+                 <CheckIcon />
+              </div>
               <span className="text-gray-700 font-medium">Suporte Prioritário</span>
             </div>
           </div>
@@ -93,10 +120,14 @@ export default function Subscription() {
 
         {/* Lado Direito: Pagamento */}
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-blue-100 relative overflow-hidden">
-          <div className="absolute top-0 right-0 bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">POPULAR</div>
+          <div className="absolute top-0 right-0 bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
+            POPULAR
+          </div>
           
           <div className="text-center mb-8">
-            <span className="text-gray-500 text-sm uppercase tracking-wider font-semibold">Assinatura Mensal</span>
+            <span className="text-gray-500 text-sm uppercase tracking-wider font-semibold">
+              Assinatura Mensal
+            </span>
             <div className="flex justify-center items-baseline mt-2">
               <span className="text-5xl font-extrabold text-gray-900">R$ 29,90</span>
               <span className="text-gray-500 ml-1">/mês</span>
@@ -105,7 +136,9 @@ export default function Subscription() {
 
           <div className="space-y-4 mb-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nome Completo</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Nome Completo
+              </label>
               <input 
                 type="text" 
                 className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:border-blue-500"
@@ -115,7 +148,9 @@ export default function Subscription() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">CPF (Apenas números)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                CPF (Apenas números)
+              </label>
               <input 
                 type="text" 
                 className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:border-blue-500"
@@ -124,7 +159,9 @@ export default function Subscription() {
                 value={userData.cpf}
                 onChange={e => setUserData({...userData, cpf: e.target.value})}
               />
-              <p className="text-xs text-gray-400 mt-1">Necessário para emissão do PIX/Boleto.</p>
+              <p className="text-xs text-gray-400 mt-1">
+                Necessário para emissão da nota fiscal.
+              </p>
             </div>
           </div>
 
@@ -133,11 +170,11 @@ export default function Subscription() {
             disabled={loading}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg hover:shadow-blue-200 disabled:opacity-70 disabled:cursor-not-allowed"
           >
-            {loading ? "Gerando Pagamento..." : "Assinar Agora"}
+            {loading ? "Processando..." : "Assinar Agora"}
           </button>
           
           <p className="text-center text-xs text-gray-400 mt-4">
-            Pagamento seguro via Asaas. Cancele quando quiser.
+            Pagamento seguro. Cancele quando quiser.
           </p>
         </div>
 
