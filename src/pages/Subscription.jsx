@@ -5,19 +5,13 @@ export default function Subscription() {
   const [loading, setLoading] = useState(false);
   const [userData, setUserData] = useState({ name: "", cpf: "" });
 
+  // Tenta preencher o nome automaticamente se o usuário já tiver cadastrado
   useEffect(() => {
     async function loadUser() {
-      // Proteção contra falhas no Supabase
-      try {
-        const { data } = await supabase.auth.getUser();
-        if (data?.user) {
-          setUserData(prev => ({ 
-            ...prev, 
-            name: data.user.user_metadata?.full_name || "" 
-          }));
-        }
-      } catch (error) {
-        console.log("Usuário não logado ou erro no supabase", error);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        // Pega o nome do metadata ou do perfil (se tiver)
+        setUserData(prev => ({ ...prev, name: user.user_metadata.full_name || "" }));
       }
     }
     loadUser();
@@ -32,13 +26,16 @@ export default function Subscription() {
     setLoading(true);
 
     try {
+      // Chama nossa API na Vercel (o arquivo que acabamos de criar)
       const response = await fetch('/api/create-payment', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           customerName: userData.name,
           customerCpf: userData.cpf,
-          value: 29.90
+          value: 29.90 // Valor do plano
         })
       });
 
@@ -48,6 +45,7 @@ export default function Subscription() {
         throw new Error(data.error || "Erro ao gerar pagamento");
       }
 
+      // Se deu certo, redireciona o usuário para o link de pagamento do Asaas
       if (data.invoiceUrl) {
         window.location.href = data.invoiceUrl;
       } else {
@@ -66,73 +64,81 @@ export default function Subscription() {
     <div className="min-h-screen bg-gray-50 py-12 px-4 flex justify-center items-center">
       <div className="max-w-4xl w-full grid grid-cols-1 md:grid-cols-2 gap-8">
         
-        {/* Lado Esquerdo */}
+        {/* Lado Esquerdo: Benefícios */}
         <div className="space-y-6">
           <div>
-            <h1 className="text-4xl font-extrabold text-gray-900 mb-2">
-              Seja <span className="text-blue-600">PRO</span>
-            </h1>
-            <p className="text-lg text-gray-600">
-              Desbloqueie todo o poder do sistema.
-            </p>
+            <h1 className="text-4xl font-extrabold text-gray-900 mb-2">Seja <span className="text-blue-600">PRO</span></h1>
+            <p className="text-lg text-gray-600">Desbloqueie todo o poder do UltraOrça e profissionalize seu negócio.</p>
           </div>
 
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-            {/* USANDO EMOJIS PARA NÃO DAR ERRO DE SVG */}
             <div className="flex items-center gap-3">
-              <span className="text-green-500 font-bold text-xl">✅</span>
+              <div className="bg-green-100 p-2 rounded-full text-green-600">✓</div>
               <span className="text-gray-700 font-medium">Orçamentos Ilimitados</span>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-green-500 font-bold text-xl">✅</span>
+              <div className="bg-green-100 p-2 rounded-full text-green-600">✓</div>
               <span className="text-gray-700 font-medium">Sua Logo nos PDFs</span>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-green-500 font-bold text-xl">✅</span>
-              <span className="text-gray-700 font-medium">Gestão de Clientes</span>
+              <div className="bg-green-100 p-2 rounded-full text-green-600">✓</div>
+              <span className="text-gray-700 font-medium">Gestão de Clientes e Histórico</span>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-green-500 font-bold text-xl">✅</span>
+              <div className="bg-green-100 p-2 rounded-full text-green-600">✓</div>
               <span className="text-gray-700 font-medium">Suporte Prioritário</span>
             </div>
           </div>
         </div>
 
         {/* Lado Direito: Pagamento */}
-        <div className="bg-white rounded-2xl shadow-xl p-8 border border-blue-100 relative">
+        <div className="bg-white rounded-2xl shadow-xl p-8 border border-blue-100 relative overflow-hidden">
+          <div className="absolute top-0 right-0 bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">POPULAR</div>
+          
           <div className="text-center mb-8">
-            <span className="text-gray-500 text-sm uppercase font-semibold">
-              Assinatura Mensal
-            </span>
+            <span className="text-gray-500 text-sm uppercase tracking-wider font-semibold">Assinatura Mensal</span>
             <div className="flex justify-center items-baseline mt-2">
               <span className="text-5xl font-extrabold text-gray-900">R$ 29,90</span>
+              <span className="text-gray-500 ml-1">/mês</span>
             </div>
           </div>
 
           <div className="space-y-4 mb-6">
-            <input 
-              type="text" 
-              className="w-full p-3 border border-gray-300 rounded-lg"
-              placeholder="Seu nome"
-              value={userData.name}
-              onChange={e => setUserData({...userData, name: e.target.value})}
-            />
-            <input 
-              type="text" 
-              className="w-full p-3 border border-gray-300 rounded-lg"
-              placeholder="CPF (apenas números)"
-              value={userData.cpf}
-              onChange={e => setUserData({...userData, cpf: e.target.value})}
-            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nome Completo</label>
+              <input 
+                type="text" 
+                className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:border-blue-500"
+                placeholder="Seu nome"
+                value={userData.name}
+                onChange={e => setUserData({...userData, name: e.target.value})}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">CPF (Apenas números)</label>
+              <input 
+                type="text" 
+                className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:border-blue-500"
+                placeholder="000.000.000-00"
+                maxLength={14}
+                value={userData.cpf}
+                onChange={e => setUserData({...userData, cpf: e.target.value})}
+              />
+              <p className="text-xs text-gray-400 mt-1">Necessário para emissão do PIX/Boleto.</p>
+            </div>
           </div>
 
           <button
             onClick={handlePayment}
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg hover:shadow-blue-200 disabled:opacity-70 disabled:cursor-not-allowed"
           >
-            {loading ? "Processando..." : "Assinar Agora"}
+            {loading ? "Gerando Pagamento..." : "Assinar Agora"}
           </button>
+          
+          <p className="text-center text-xs text-gray-400 mt-4">
+            Pagamento seguro via Asaas. Cancele quando quiser.
+          </p>
         </div>
 
       </div>
