@@ -22,6 +22,7 @@ import MyData from "./pages/MyData";
 import Subscription from "./pages/Subscription";
 import Tutorials from "./pages/Tutorials";
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import Subscription from "./pages/Subscription";
 
 export default function App() {
   return (
@@ -48,7 +49,7 @@ export default function App() {
           <Route path="my-data" element={<MyData />} />
           <Route path="subscription" element={<Subscription />} />
           <Route path="tutorials" element={<Tutorials />} />
-          
+          <Route path="/app/subscription" element={<Subscription />} />
           {/* Rota Admin */}
           <Route path="admin" element={<AdminDashboard />} />
         </Route>
