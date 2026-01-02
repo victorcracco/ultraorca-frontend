@@ -1,14 +1,13 @@
 export default async function handler(req, res) {
-  // 1. Segurança: Só aceita requisições POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const { customerName, customerCpf, value } = req.body;
+    // Agora pegamos também a 'description'
+    const { customerName, customerCpf, value, description } = req.body;
 
-    // 2. Cria o cliente no Asaas (ou busca se já existir - simplificado aqui cria novo)
-    // O ideal seria salvar o customer_id no Supabase, mas faremos direto por enquanto
+    // 1. Cria ou Busca Cliente no Asaas
     const customerResponse = await fetch(`${process.env.ASAAS_URL}/customers`, {
       method: 'POST',
       headers: {
@@ -24,10 +23,10 @@ export default async function handler(req, res) {
     const customerData = await customerResponse.json();
     
     if (customerData.errors) {
-        throw new Error(customerData.errors[0].description);
+        throw new Error("Erro no Cliente: " + customerData.errors[0].description);
     }
 
-    // 3. Cria a cobrança (Link de Pagamento / Boleto / PIX)
+    // 2. Cria a Cobrança (Pix ou Boleto)
     const paymentResponse = await fetch(`${process.env.ASAAS_URL}/payments`, {
       method: 'POST',
       headers: {
@@ -36,29 +35,26 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         customer: customerData.id,
-        billingType: "PIX", // Ou UNDEFINED para deixar o cliente escolher
+        billingType: "UNDEFINED", // "UNDEFINED" deixa o cliente escolher entre PIX e Boleto na tela do Asaas
         value: value,
-        dueDate: new Date().toISOString().split('T')[0], // Vence hoje
-        description: "Assinatura UltraOrça PRO"
+        dueDate: new Date().toISOString().split('T')[0],
+        description: description || "Assinatura UltraOrça PRO" // Usa a descrição do plano
       })
     });
 
     const paymentData = await paymentResponse.json();
 
     if (paymentData.errors) {
-        throw new Error(paymentData.errors[0].description);
+        throw new Error("Erro na Cobrança: " + paymentData.errors[0].description);
     }
 
-    // 4. Devolve os dados do pagamento para o Front-end
     return res.status(200).json({
       success: true,
-      paymentId: paymentData.id,
-      invoiceUrl: paymentData.invoiceUrl, // Link para o cliente pagar
-      pixQrcode: paymentData.bankSlipUrl // No sandbox as vezes varia, mas o invoiceUrl é garantido
+      invoiceUrl: paymentData.invoiceUrl 
     });
 
   } catch (error) {
     console.error("Erro Asaas:", error);
-    return res.status(500).json({ error: error.message || "Erro ao criar pagamento" });
+    return res.status(500).json({ error: error.message });
   }
 }
