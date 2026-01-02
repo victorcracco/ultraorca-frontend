@@ -19,10 +19,9 @@ import Dashboard from "./pages/Dashboard";
 import NewBudget from "./pages/NewBudget";
 import Products from "./pages/Products";
 import MyData from "./pages/MyData";
-import Subscription from "./pages/Subscription";
 import Tutorials from "./pages/Tutorials";
 import AdminDashboard from "./pages/admin/AdminDashboard";
-import Subscription from "./pages/Subscription";
+import Subscription from "./pages/Subscription"; // Importado apenas uma vez agora
 
 export default function App() {
   return (
@@ -47,9 +46,11 @@ export default function App() {
           <Route path="new-budget" element={<NewBudget />} />
           <Route path="products" element={<Products />} />
           <Route path="my-data" element={<MyData />} />
-          <Route path="subscription" element={<Subscription />} />
           <Route path="tutorials" element={<Tutorials />} />
-          <Route path="/app/subscription" element={<Subscription />} />
+          
+          {/* Rota corrigida: acessível em /app/subscription */}
+          <Route path="subscription" element={<Subscription />} />
+          
           {/* Rota Admin */}
           <Route path="admin" element={<AdminDashboard />} />
         </Route>
