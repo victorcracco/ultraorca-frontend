@@ -72,13 +72,14 @@ export default function Subscription() {
         })
       });
 
-      // Tenta ler o erro com cuidado para não quebrar se vier HTML
       const textResponse = await response.text(); 
       let data;
       try {
         data = JSON.parse(textResponse);
       } catch (e) {
-        throw new Error("Erro no servidor (API). Verifique os logs da Vercel.");
+        // Se der erro de JSON, provavelmente é aquele erro de "undefined" que apareceu
+        console.error("Erro bruto:", textResponse);
+        throw new Error("Erro de configuração na API (Variáveis de Ambiente faltando).");
       }
 
       if (!response.ok) {
@@ -117,6 +118,7 @@ export default function Subscription() {
               "Orçamentos ILIMITADOS",
               "Cadastro de Clientes e Produtos",
               "Sua Logo e Cores nos PDFs",
+              // REMOVIDO: "Link de Pagamento..."
               "Suporte Prioritário"
             ].map((item, index) => (
               <div key={index} className="flex items-center gap-3">
