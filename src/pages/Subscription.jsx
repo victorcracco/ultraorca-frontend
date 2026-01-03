@@ -3,24 +3,27 @@ import { supabase } from "../services/supabase";
 
 export default function Subscription() {
   const [loading, setLoading] = useState(false);
-  const [userData, setUserData] = useState({ name: "", cpf: "" });
+  const [userData, setUserData] = useState({ name: "", cpf: "", email: "" });
   
-  // Controle do Plano (monthly ou annual)
-  const [billingCycle, setBillingCycle] = useState("monthly");
+  // Começa com anual para incentivar o ticket maior
+  const [billingCycle, setBillingCycle] = useState("annual");
 
-  // Configuração dos preços
+  // --- PREÇOS NOVOS AQUI ---
   const plans = {
     monthly: {
-      price: 29.90,
-      label: "/mês",
-      totalDisplay: "R$ 29,90",
-      description: "Assinatura Mensal - UltraOrça PRO"
+      totalPrice: 19.99,
+      displayPrice: "19,99",
+      periodLabel: "/mês",
+      description: "Assinatura Mensal - UltraOrça PRO",
+      savings: null
     },
     annual: {
-      price: 299.00, // Equivalente a ~24,90/mês (2 meses grátis)
-      label: "/ano",
-      totalDisplay: "R$ 299,00",
-      description: "Assinatura Anual - UltraOrça PRO (2 meses grátis)"
+      totalPrice: 199.99,
+      displayPrice: "16,66", // R$ 199,99 dividido por 12
+      periodLabel: "/mês*",
+      subLabel: "Faturado R$ 199,99 anualmente",
+      description: "Assinatura Anual - UltraOrça PRO (2 meses grátis)",
+      savings: "Economize R$ 40,00/ano" // (19,99 * 12) - 199,99
     }
   };
 
@@ -33,7 +36,8 @@ export default function Subscription() {
         if (data?.user) {
           setUserData(prev => ({ 
             ...prev, 
-            name: data.user.user_metadata?.full_name || "" 
+            name: data.user.user_metadata?.full_name || "",
+            email: data.user.email // Importante pegar o e-mail também
           }));
         }
       } catch (error) {
@@ -52,14 +56,20 @@ export default function Subscription() {
     setLoading(true);
 
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não logado!");
+
       const response = await fetch('/api/create-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          userId: user.id, // Enviamos o ID do usuário para vincular
+          userEmail: userData.email || user.email,
           customerName: userData.name,
           customerCpf: userData.cpf,
-          value: currentPlan.price, // Manda o valor correto (29.90 ou 299.00)
-          description: currentPlan.description // Manda a descrição correta
+          value: currentPlan.totalPrice,
+          description: currentPlan.description,
+          planType: billingCycle // 'monthly' ou 'annual'
         })
       });
 
@@ -70,10 +80,7 @@ export default function Subscription() {
       }
 
       if (data.invoiceUrl) {
-        // Redireciona para o pagamento
         window.location.href = data.invoiceUrl;
-      } else {
-        alert("Erro: Link de pagamento não gerado.");
       }
 
     } catch (error) {
@@ -86,105 +93,122 @@ export default function Subscription() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 flex justify-center items-center">
-      <div className="max-w-5xl w-full grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+      <div className="max-w-5xl w-full grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
         
-        {/* Lado Esquerdo: Texto e Benefícios */}
+        {/* Lado Esquerdo: Argumentos de Venda */}
         <div className="space-y-8">
           <div>
-            <h1 className="text-4xl font-extrabold text-gray-900 mb-2">
-              Profissionalize seu negócio
+            <h1 className="text-4xl font-extrabold text-gray-900 mb-4 leading-tight">
+              O melhor preço do mercado: <span className="text-blue-600">R$ 19,99</span>
             </h1>
             <p className="text-lg text-gray-600">
-              Escolha o plano ideal e desbloqueie orçamentos ilimitados, gestão de clientes e sua marca em destaque.
+              Custo-benefício imbatível. Profissionalize seus orçamentos pelo preço de um lanche.
             </p>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-5">
             {[
-              "Orçamentos e Clientes Ilimitados",
-              "PDFs sem marca d'água do sistema",
-              "Sua Logo e Cores nos documentos",
-              "Acesso ao Painel de Gestão Avançado"
+              "Orçamentos ILIMITADOS",
+              "Cadastro de Clientes e Produtos",
+              "Sua Logo e Cores nos PDFs",
+              "Link de Pagamento (Em breve)",
+              "Suporte Prioritário"
             ].map((item, index) => (
               <div key={index} className="flex items-center gap-3">
-                <div className="bg-green-100 p-1 rounded-full text-xs">✅</div>
-                <span className="text-gray-700 font-medium">{item}</span>
+                <div className="bg-green-100 p-1.5 rounded-full text-green-700 text-xs">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
+                </div>
+                <span className="text-gray-700 font-medium text-lg">{item}</span>
               </div>
             ))}
+          </div>
+
+          <div className="flex items-center gap-4 pt-4 border-t border-gray-200">
+            <span className="text-2xl">🛡️</span>
+            <p className="text-sm text-gray-500">
+              <strong>Compra Segura.</strong> Seus dados protegidos.
+            </p>
           </div>
         </div>
 
         {/* Lado Direito: Card de Preço */}
-        <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden relative">
+        <div className="bg-white rounded-3xl shadow-2xl border border-blue-100 overflow-hidden relative transform transition-all hover:scale-[1.01]">
           
+          {billingCycle === "annual" && (
+            <div className="bg-blue-600 text-white text-center text-xs font-bold py-2 tracking-widest uppercase">
+              Melhor Custo-Benefício
+            </div>
+          )}
+
           <div className="p-8 text-center">
-            {/* Toggle Mensal/Anual */}
+            {/* Toggle Switch */}
             <div className="flex justify-center mb-8">
-              <div className="bg-gray-100 p-1 rounded-full inline-flex relative">
+              <div className="bg-gray-100 p-1 rounded-xl inline-flex relative w-full max-w-xs">
                 <button
                   onClick={() => setBillingCycle("monthly")}
-                  className={`px-6 py-2 rounded-full text-sm font-bold transition-all ${
-                    billingCycle === "monthly" 
-                    ? "bg-white text-blue-900 shadow-sm" 
-                    : "text-gray-500 hover:text-gray-900"
+                  className={`w-1/2 py-2 rounded-lg text-sm font-bold transition-all duration-300 ${
+                    billingCycle === "monthly" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
                   }`}
                 >
                   Mensal
                 </button>
                 <button
                   onClick={() => setBillingCycle("annual")}
-                  className={`px-6 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2 ${
-                    billingCycle === "annual" 
-                    ? "bg-white text-blue-900 shadow-sm" 
-                    : "text-gray-500 hover:text-gray-900"
+                  className={`w-1/2 py-2 rounded-lg text-sm font-bold transition-all duration-300 relative ${
+                    billingCycle === "annual" ? "bg-white text-blue-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
                   }`}
                 >
                   Anual
-                  <span className="bg-green-100 text-green-700 text-[10px] px-2 py-0.5 rounded-full">
-                    -17% OFF
+                  <span className="absolute -top-3 -right-3 bg-green-500 text-white text-[10px] px-2 py-0.5 rounded-full border-2 border-white">
+                    -17%
                   </span>
                 </button>
               </div>
             </div>
 
-            {/* Preço Grande */}
+            {/* Display do Preço */}
             <div className="mb-2">
-              <span className="text-5xl font-extrabold text-gray-900">
-                {currentPlan.totalDisplay}
-              </span>
-              <span className="text-gray-500 font-medium ml-2">
-                {billingCycle === "monthly" ? "/mês" : "/ano"}
-              </span>
+              <div className="flex justify-center items-end gap-1">
+                <span className="text-2xl font-bold text-gray-400 pb-2">R$</span>
+                <span className="text-6xl font-extrabold text-gray-900 leading-none">
+                  {currentPlan.displayPrice}
+                </span>
+                <span className="text-xl font-medium text-gray-500 pb-2">
+                  {currentPlan.periodLabel}
+                </span>
+              </div>
             </div>
-            
-            {billingCycle === "annual" && (
-              <p className="text-green-600 text-sm font-medium mb-6 animate-pulse">
-                Economize R$ 60,00 por ano!
-              </p>
-            )}
-             {billingCycle === "monthly" && (
-              <p className="text-gray-400 text-sm font-medium mb-6">
-                Cancele a qualquer momento.
-              </p>
-            )}
 
-            {/* Formulário Rápido */}
-            <div className="space-y-3 text-left bg-gray-50 p-4 rounded-xl mb-6">
+            <div className="h-12 mb-6">
+              {billingCycle === "annual" ? (
+                <>
+                  <p className="text-sm text-gray-500">{currentPlan.subLabel}</p>
+                  <p className="text-green-600 text-sm font-bold bg-green-50 inline-block px-3 py-1 rounded-full mt-1">
+                    {currentPlan.savings}
+                  </p>
+                </>
+              ) : (
+                <p className="text-gray-400 text-sm mt-2">Cancele quando quiser.</p>
+              )}
+            </div>
+
+            {/* Inputs */}
+            <div className="space-y-3 text-left bg-gray-50 p-5 rounded-2xl mb-6 border border-gray-100">
               <div>
-                <label className="text-xs font-bold text-gray-500 uppercase">Nome na Nota</label>
+                <label className="text-xs font-bold text-gray-500 uppercase ml-1">Nome Completo</label>
                 <input 
                   type="text" 
-                  className="w-full bg-white border border-gray-200 rounded p-2 text-sm mt-1 focus:border-blue-500 outline-none"
+                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-sm mt-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   value={userData.name}
                   onChange={e => setUserData({...userData, name: e.target.value})}
-                  placeholder="Nome completo"
+                  placeholder="Seu nome"
                 />
               </div>
               <div>
-                <label className="text-xs font-bold text-gray-500 uppercase">CPF</label>
+                <label className="text-xs font-bold text-gray-500 uppercase ml-1">CPF</label>
                 <input 
                   type="text" 
-                  className="w-full bg-white border border-gray-200 rounded p-2 text-sm mt-1 focus:border-blue-500 outline-none"
+                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-sm mt-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   value={userData.cpf}
                   onChange={e => setUserData({...userData, cpf: e.target.value})}
                   placeholder="000.000.000-00"
@@ -196,10 +220,16 @@ export default function Subscription() {
             <button
               onClick={handlePayment}
               disabled={loading}
-              className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl hover:bg-blue-700 transition-transform active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed shadow-lg hover:shadow-blue-200"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold py-4 rounded-xl transition-all transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed shadow-lg hover:shadow-blue-200 flex justify-center items-center gap-2"
             >
-              {loading ? "Gerando Pagamento..." : `Assinar Plano ${billingCycle === 'monthly' ? 'Mensal' : 'Anual'}`}
+              {loading ? "Processando..." : (
+                <><span>Assinar Agora</span><span>→</span></>
+              )}
             </button>
+            
+            <p className="text-center text-xs text-gray-400 mt-4">
+              Aceitamos Pix, Boleto e Cartão
+            </p>
             
           </div>
         </div>
