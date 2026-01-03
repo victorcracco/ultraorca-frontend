@@ -8,7 +8,6 @@ export default function Subscription() {
   // Começa com anual para incentivar o ticket maior
   const [billingCycle, setBillingCycle] = useState("annual");
 
-  // --- PREÇOS NOVOS AQUI ---
   const plans = {
     monthly: {
       totalPrice: 19.99,
@@ -23,7 +22,7 @@ export default function Subscription() {
       periodLabel: "/mês*",
       subLabel: "Faturado R$ 199,99 anualmente",
       description: "Assinatura Anual - UltraOrça PRO (2 meses grátis)",
-      savings: "Economize R$ 40,00/ano" // (19,99 * 12) - 199,99
+      savings: "Economize R$ 40,00/ano"
     }
   };
 
@@ -37,7 +36,7 @@ export default function Subscription() {
           setUserData(prev => ({ 
             ...prev, 
             name: data.user.user_metadata?.full_name || "",
-            email: data.user.email // Importante pegar o e-mail também
+            email: data.user.email 
           }));
         }
       } catch (error) {
@@ -57,23 +56,30 @@ export default function Subscription() {
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Usuário não logado!");
+      if (!user) throw new Error("Usuário não logado! Faça login novamente.");
 
       const response = await fetch('/api/create-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: user.id, // Enviamos o ID do usuário para vincular
+          userId: user.id,
           userEmail: userData.email || user.email,
           customerName: userData.name,
           customerCpf: userData.cpf,
           value: currentPlan.totalPrice,
           description: currentPlan.description,
-          planType: billingCycle // 'monthly' ou 'annual'
+          planType: billingCycle
         })
       });
 
-      const data = await response.json();
+      // Tenta ler o erro com cuidado para não quebrar se vier HTML
+      const textResponse = await response.text(); 
+      let data;
+      try {
+        data = JSON.parse(textResponse);
+      } catch (e) {
+        throw new Error("Erro no servidor (API). Verifique os logs da Vercel.");
+      }
 
       if (!response.ok) {
         throw new Error(data.error || "Erro ao gerar pagamento");
@@ -85,7 +91,7 @@ export default function Subscription() {
 
     } catch (error) {
       console.error(error);
-      alert("Erro ao processar: " + error.message);
+      alert("Ops! " + error.message);
     } finally {
       setLoading(false);
     }
@@ -111,7 +117,6 @@ export default function Subscription() {
               "Orçamentos ILIMITADOS",
               "Cadastro de Clientes e Produtos",
               "Sua Logo e Cores nos PDFs",
-              "Link de Pagamento (Em breve)",
               "Suporte Prioritário"
             ].map((item, index) => (
               <div key={index} className="flex items-center gap-3">
