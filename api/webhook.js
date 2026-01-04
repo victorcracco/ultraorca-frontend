@@ -1,64 +1,56 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Configura o Supabase com a chave ADMIN (Service Role) 
-// para poder escrever na tabela sem estar logado como usuário
+// Conecta com permissão total (Service Role) para atualizar o banco
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY // ATENÇÃO: Você precisará pegar essa chave no painel
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
 export default async function handler(req, res) {
-  // 1. Segurança: Só aceita POST
+  // 1. Só aceita POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  // 2. Segurança básica: Verifica se tem token do Asaas (Opcional mas recomendado)
-  const asaasToken = req.headers['asaas-access-token'];
-  if (asaasToken !== process.env.ASAAS_WEBHOOK_TOKEN) {
-     // Por enquanto vamos deixar passar se não tiver token configurado, 
-     // mas em produção isso é vital.
-     // return res.status(401).json({ error: 'Unauthorized' });
   }
 
   try {
     const event = req.body;
     
-    // O Asaas manda vários tipos de evento. Queremos saber de PAGAMENTOS.
-    // Tipos comuns: PAYMENT_CONFIRMED, PAYMENT_RECEIVED
-    
+    // Logs para você acompanhar na Vercel o que está chegando
+    console.log("🔔 Evento Asaas Recebido:", event.event);
+
+    // Eventos de Pagamento Confirmado (Pix, Boleto ou Cartão)
     if (event.event === 'PAYMENT_CONFIRMED' || event.event === 'PAYMENT_RECEIVED') {
       const payment = event.payment;
-      const customerId = payment.customer; // ID do cliente no Asaas (cus_xxx)
+      const customerId = payment.customer; 
 
-      console.log(`💰 Pagamento recebido! Cliente: ${customerId}, Valor: ${payment.value}`);
-
-      // 3. Achar o usuário no Supabase pelo customer_id do Asaas
-      // (Isso assume que salvamos o customer_id na tabela subscriptions antes)
-      // Se não tivermos o customer_id linkado, teremos que buscar pelo CPF/Email
-      
-      // Lógica Simplificada:
-      // Vamos atualizar a tabela subscriptions baseada no customer_id
-      
+      // Atualiza o status no banco de dados
       const { data, error } = await supabase
         .from('subscriptions')
         .update({ 
           status: 'active',
           updated_at: new Date()
         })
-        .eq('customer_id', customerId); // Atualiza quem tiver esse ID do Asaas
+        .eq('customer_id', customerId); // Busca quem tem esse ID de cliente
 
-      if (error) throw error;
+      if (error) {
+        console.error("❌ Erro ao atualizar Supabase:", error);
+        throw error;
+      }
+      
+      console.log(`✅ Cliente ${customerId} ativado com sucesso!`);
     } 
     
-    else if (event.event === 'PAYMENT_OVERDUE') {
-      // Se venceu e não pagou -> status: overdue
+    // Se o pagamento vencer ou for estornado
+    else if (event.event === 'PAYMENT_OVERDUE' || event.event === 'PAYMENT_REFUNDED') {
        await supabase
         .from('subscriptions')
-        .update({ status: 'overdue' })
+        .update({ status: 'canceled' })
         .eq('customer_id', event.payment.customer);
+       
+       console.log(`🚫 Assinatura cancelada/vencida para ${event.payment.customer}`);
     }
 
+    // O Asaas exige que retornemos status 200
     return res.status(200).json({ received: true });
 
   } catch (error) {
