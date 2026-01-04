@@ -3,7 +3,7 @@ import { Navigate, Outlet } from "react-router-dom";
 import { supabase } from "../services/supabase";
 
 // Coloque seu email aqui (tudo minúsculo para garantir)
-const ADMIN_EMAIL = "seuemail@exemplo.com"; 
+const ADMIN_EMAIL = "victorcracco@gmail.com"; 
 
 export default function AdminRoute() {
   const [isAdmin, setIsAdmin] = useState(null);
