@@ -4,9 +4,10 @@ import { supabase } from "../services/supabase";
 export default function Subscription() {
   const [loading, setLoading] = useState(false);
   const [userData, setUserData] = useState({ name: "", cpf: "", email: "" });
-  const [subscription, setSubscription] = useState(null); // Estado para guardar a assinatura
-  const [billingCycle, setBillingCycle] = useState("annual"); // Começa com anual
+  const [subscription, setSubscription] = useState(null); // Estado da assinatura
+  const [billingCycle, setBillingCycle] = useState("annual"); // Padrão: Anual
 
+  // Configuração dos Planos
   const plans = {
     monthly: {
       totalPrice: 19.99,
@@ -17,7 +18,7 @@ export default function Subscription() {
     },
     annual: {
       totalPrice: 199.99,
-      displayPrice: "16,66",
+      displayPrice: "16,66", // Valor equivalente mensal
       periodLabel: "/mês*",
       subLabel: "Faturado R$ 199,99 anualmente",
       description: "Assinatura Anual - UltraOrça PRO (2 meses grátis)",
@@ -27,10 +28,10 @@ export default function Subscription() {
 
   const currentPlan = plans[billingCycle];
 
+  // 1. Carrega dados do Usuário e Verifica Assinatura ao abrir a tela
   useEffect(() => {
     async function loadData() {
       try {
-        // 1. Pega o Usuário Logado
         const { data: { user } } = await supabase.auth.getUser();
         
         if (user) {
@@ -40,16 +41,16 @@ export default function Subscription() {
             email: user.email 
           }));
 
-          // 2. VERIFICAÇÃO DE ASSINATURA (A Mágica acontece aqui)
-          const { data: subData, error } = await supabase
+          // Busca no Supabase se existe uma assinatura ATIVA
+          const { data: subData } = await supabase
             .from('subscriptions')
             .select('*')
             .eq('user_id', user.id)
-            .eq('status', 'active') // Só queremos saber se está ATIVO
+            .eq('status', 'active')
             .single();
 
           if (subData) {
-            setSubscription(subData); // Salva que o usuário é PRO
+            setSubscription(subData);
           }
         }
       } catch (error) {
@@ -59,6 +60,7 @@ export default function Subscription() {
     loadData();
   }, []);
 
+  // 2. Função de Comprar (Gera Link do Asaas)
   const handlePayment = async () => {
     if (!userData.cpf || !userData.name) {
       alert("Por favor, preencha nome e CPF para emitir a nota fiscal.");
@@ -109,7 +111,36 @@ export default function Subscription() {
     }
   };
 
-  // --- TELA DE ASSINANTE (Se já pagou, mostra isso) ---
+  // 3. Função de Cancelar (Chama API de cancelamento)
+  const handleCancel = async () => {
+    if (!confirm("Tem certeza que deseja cancelar sua assinatura? Você perderá acesso aos recursos PRO imediatamente.")) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      const response = await fetch('/api/cancel-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id })
+      });
+
+      if (response.ok) {
+        alert("Assinatura cancelada com sucesso.");
+        window.location.reload(); // Recarrega a página para voltar ao plano Free
+      } else {
+        throw new Error("Erro ao cancelar. Tente novamente ou contate o suporte.");
+      }
+    } catch (error) {
+      alert("Erro: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- RENDERIZAÇÃO: TELA DE ASSINANTE (Se já pagou) ---
   if (subscription) {
     return (
       <div className="min-h-screen bg-gray-50 py-12 px-4 flex justify-center items-center">
@@ -123,7 +154,7 @@ export default function Subscription() {
             Você é <span className="text-blue-600">PRO</span>!
           </h2>
           <p className="text-gray-500 mb-8">
-            Sua assinatura está ativa e você tem acesso ilimitado.
+            Sua assinatura está ativa e você tem acesso ilimitado a todos os recursos.
           </p>
 
           <div className="bg-gray-50 rounded-xl p-6 text-left space-y-3 mb-8">
@@ -148,17 +179,18 @@ export default function Subscription() {
           </div>
 
           <button 
-            className="text-gray-400 text-sm hover:text-red-500 transition-colors underline"
-            onClick={() => alert("Para cancelar, entre em contato com o suporte ou gerencie pelo painel do Asaas.")}
+            onClick={handleCancel}
+            disabled={loading}
+            className="text-red-400 text-sm hover:text-red-600 transition-colors underline hover:bg-red-50 px-4 py-2 rounded-lg w-full"
           >
-            Gerenciar Assinatura
+            {loading ? "Cancelando..." : "Cancelar Assinatura"}
           </button>
         </div>
       </div>
     );
   }
 
-  // --- TELA DE VENDAS (Se não pagou, mostra isso) ---
+  // --- RENDERIZAÇÃO: TELA DE VENDAS (Se for Free) ---
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 flex justify-center items-center">
       <div className="max-w-5xl w-full grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
