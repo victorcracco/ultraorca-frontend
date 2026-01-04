@@ -28,9 +28,31 @@ export default function Subscription() {
 
   const currentPlan = plans[billingCycle];
 
-  // 1. Carrega dados do Usuário e Verifica Assinatura ao abrir a tela
+  // Função auxiliar para verificar no banco se já virou PRO
+  const checkSubscription = async (userId) => {
+    try {
+      const { data: subData } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .single();
+
+      if (subData) {
+        setSubscription(subData); // Atualiza a tela para PRO
+        return true; // Retorna verdadeiro (achou!)
+      }
+    } catch (error) {
+      // Erro silencioso (comum enquanto não acha)
+    }
+    return false;
+  };
+
+  // 1. Carrega dados e Inicia o "Radar" (Polling)
   useEffect(() => {
-    async function loadData() {
+    let intervalId;
+
+    async function loadUserAndStartPolling() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         
@@ -41,23 +63,33 @@ export default function Subscription() {
             email: user.email 
           }));
 
-          // Busca no Supabase se existe uma assinatura ATIVA
-          const { data: subData } = await supabase
-            .from('subscriptions')
-            .select('*')
-            .eq('user_id', user.id)
-            .eq('status', 'active')
-            .single();
+          // Checagem 1: Verifica imediatamente ao abrir
+          const isPro = await checkSubscription(user.id);
 
-          if (subData) {
-            setSubscription(subData);
+          // Checagem 2: Se NÃO for PRO, verifica a cada 3 segundos (Polling)
+          // Isso serve para pegar o pagamento do Asaas assim que o cliente voltar
+          if (!isPro) {
+            intervalId = setInterval(async () => {
+              console.log("🔄 Verificando pagamento...");
+              const found = await checkSubscription(user.id);
+              if (found) {
+                clearInterval(intervalId); // Para de verificar se achou
+                // Opcional: alert("Pagamento confirmado!");
+              }
+            }, 3000);
           }
         }
       } catch (error) {
         console.log("Erro ao carregar dados:", error);
       }
     }
-    loadData();
+
+    loadUserAndStartPolling();
+
+    // Limpeza: Desliga o radar se o usuário fechar a tela
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
   }, []);
 
   // 2. Função de Comprar (Gera Link do Asaas)
@@ -220,6 +252,11 @@ export default function Subscription() {
                 <span className="text-gray-700 font-medium text-lg">{item}</span>
               </div>
             ))}
+          </div>
+
+          {/* NOVO: Aviso de tempo de processamento */}
+          <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded text-sm text-blue-700">
+            <strong>ℹ️ Importante:</strong> A liberação ocorre automaticamente em alguns segundos após o pagamento.
           </div>
 
           <div className="flex items-center gap-4 pt-4 border-t border-gray-200">
