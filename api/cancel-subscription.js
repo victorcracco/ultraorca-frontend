@@ -1,15 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Inicializa o Supabase com a chave secreta para poder alterar dados
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// ESSA LINHA ABAIXO É A QUE ESTAVA FALTANDO OU COM ERRO
 export default async function handler(req, res) {
-  
-  // Permite CORS (opcional, mas bom para garantir que o front acesse)
+  // Configuração CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -25,27 +22,20 @@ export default async function handler(req, res) {
   try {
     const { userId } = req.body;
 
-    if (!userId) {
-      throw new Error("User ID is required");
-    }
+    if (!userId) throw new Error("User ID is required");
 
-    // 1. Busca o ID do cliente no Asaas (customer_id) guardado no Supabase
+    // 1. Busca dados da assinatura
     const { data: subData, error: subError } = await supabase
       .from('subscriptions')
       .select('customer_id')
       .eq('user_id', userId)
       .single();
 
-    if (subError || !subData) {
-      throw new Error("Assinatura não encontrada no banco de dados.");
-    }
+    if (subError || !subData) throw new Error("Assinatura não encontrada.");
 
     const customerId = subData.customer_id;
 
-    // 2. Avisa o Asaas para cancelar cobranças PENDENTES (Não pagas)
-    // Isso impede que o cliente receba cobranças futuras se tiver parcelado
-    
-    // Lista as cobranças pendentes
+    // 2. Busca cobranças pendentes no Asaas
     const listResponse = await fetch(`${process.env.ASAAS_URL}/payments?customer=${customerId}&status=PENDING`, {
       method: 'GET',
       headers: { 
@@ -56,7 +46,7 @@ export default async function handler(req, res) {
     
     const listData = await listResponse.json();
 
-    // Loop para deletar/cancelar cada cobrança pendente
+    // 3. Cancela cada cobrança pendente
     if (listData.data) {
         for (const payment of listData.data) {
             await fetch(`${process.env.ASAAS_URL}/payments/${payment.id}`, {
@@ -66,7 +56,7 @@ export default async function handler(req, res) {
         }
     }
 
-    // 3. Atualiza o status no Supabase para 'canceled'
+    // 4. Atualiza status no banco
     const { error: updateError } = await supabase
       .from('subscriptions')
       .update({ status: 'canceled' })
@@ -74,10 +64,10 @@ export default async function handler(req, res) {
 
     if (updateError) throw updateError;
 
-    return res.status(200).json({ success: true, message: "Assinatura cancelada com sucesso." });
+    return res.status(200).json({ success: true });
 
   } catch (error) {
-    console.error("Erro ao cancelar:", error);
+    console.error("Erro API Cancelar:", error);
     return res.status(500).json({ error: error.message });
   }
 }

@@ -2,12 +2,13 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../services/supabase";
 
 export default function Subscription() {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // Loading do botão de compra
+  const [checkingStatus, setCheckingStatus] = useState(true); // Loading da tela inteira (NOVO)
+  
   const [userData, setUserData] = useState({ name: "", cpf: "", email: "" });
-  const [subscription, setSubscription] = useState(null); // Estado da assinatura
-  const [billingCycle, setBillingCycle] = useState("annual"); // Padrão: Anual
+  const [subscription, setSubscription] = useState(null);
+  const [billingCycle, setBillingCycle] = useState("annual");
 
-  // Configuração dos Planos
   const plans = {
     monthly: {
       totalPrice: 19.99,
@@ -18,7 +19,7 @@ export default function Subscription() {
     },
     annual: {
       totalPrice: 199.99,
-      displayPrice: "16,66", // Valor equivalente mensal
+      displayPrice: "16,66",
       periodLabel: "/mês*",
       subLabel: "Faturado R$ 199,99 anualmente",
       description: "Assinatura Anual - UltraOrça PRO (2 meses grátis)",
@@ -28,7 +29,7 @@ export default function Subscription() {
 
   const currentPlan = plans[billingCycle];
 
-  // Função auxiliar para verificar no banco se já virou PRO
+  // Função isolada para checar assinatura
   const checkSubscription = async (userId) => {
     try {
       const { data: subData } = await supabase
@@ -39,16 +40,15 @@ export default function Subscription() {
         .single();
 
       if (subData) {
-        setSubscription(subData); // Atualiza a tela para PRO
-        return true; // Retorna verdadeiro (achou!)
+        setSubscription(subData);
+        return true;
       }
     } catch (error) {
-      // Erro silencioso (comum enquanto não acha)
+      // Erro silencioso
     }
     return false;
   };
 
-  // 1. Carrega dados e Inicia o "Radar" (Polling)
   useEffect(() => {
     let intervalId;
 
@@ -63,36 +63,37 @@ export default function Subscription() {
             email: user.email 
           }));
 
-          // Checagem 1: Verifica imediatamente ao abrir
+          // 1. Verificação Inicial (Bloqueia a tela com Loading)
           const isPro = await checkSubscription(user.id);
+          
+          // AQUI ESTÁ A CORREÇÃO: Só tira o loading depois de checar
+          setCheckingStatus(false);
 
-          // Checagem 2: Se NÃO for PRO, verifica a cada 3 segundos (Polling)
-          // Isso serve para pegar o pagamento do Asaas assim que o cliente voltar
+          // 2. Se não for PRO, continua checando em segundo plano (Polling)
           if (!isPro) {
             intervalId = setInterval(async () => {
-              console.log("🔄 Verificando pagamento...");
               const found = await checkSubscription(user.id);
               if (found) {
-                clearInterval(intervalId); // Para de verificar se achou
-                // Opcional: alert("Pagamento confirmado!");
+                clearInterval(intervalId);
               }
             }, 3000);
           }
+        } else {
+            setCheckingStatus(false); // Se não tem user, libera a tela
         }
       } catch (error) {
-        console.log("Erro ao carregar dados:", error);
+        console.log("Erro ao carregar:", error);
+        setCheckingStatus(false);
       }
     }
 
     loadUserAndStartPolling();
 
-    // Limpeza: Desliga o radar se o usuário fechar a tela
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
   }, []);
 
-  // 2. Função de Comprar (Gera Link do Asaas)
   const handlePayment = async () => {
     if (!userData.cpf || !userData.name) {
       alert("Por favor, preencha nome e CPF para emitir a nota fiscal.");
@@ -103,7 +104,7 @@ export default function Subscription() {
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Usuário não logado! Faça login novamente.");
+      if (!user) throw new Error("Faça login novamente.");
 
       const response = await fetch('/api/create-payment', {
         method: 'POST',
@@ -121,253 +122,120 @@ export default function Subscription() {
 
       const textResponse = await response.text(); 
       let data;
-      try {
-        data = JSON.parse(textResponse);
-      } catch (e) {
-        throw new Error("Erro de comunicação com a API.");
-      }
+      try { data = JSON.parse(textResponse); } catch (e) { throw new Error("Erro API."); }
 
-      if (!response.ok) {
-        throw new Error(data.error || "Erro ao gerar pagamento");
-      }
+      if (!response.ok) throw new Error(data.error || "Erro ao gerar pagamento");
 
-      if (data.invoiceUrl) {
-        window.location.href = data.invoiceUrl;
-      }
+      if (data.invoiceUrl) window.location.href = data.invoiceUrl;
 
     } catch (error) {
-      console.error(error);
       alert("Ops! " + error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // 3. Função de Cancelar (Chama API de cancelamento)
   const handleCancel = async () => {
-    if (!confirm("Tem certeza que deseja cancelar sua assinatura? Você perderá acesso aos recursos PRO imediatamente.")) {
-      return;
-    }
-
+    if (!confirm("Tem certeza que deseja cancelar?")) return;
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
       const response = await fetch('/api/cancel-subscription', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id })
       });
-
       if (response.ok) {
-        alert("Assinatura cancelada com sucesso.");
-        window.location.reload(); // Recarrega a página para voltar ao plano Free
+        alert("Assinatura cancelada.");
+        window.location.reload();
       } else {
-        throw new Error("Erro ao cancelar. Tente novamente ou contate o suporte.");
+        throw new Error("Erro ao cancelar.");
       }
     } catch (error) {
-      alert("Erro: " + error.message);
+      alert(error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // --- RENDERIZAÇÃO: TELA DE ASSINANTE (Se já pagou) ---
+  // --- TELA DE LOADING (EVITA O PISCA-PISCA) ---
+  if (checkingStatus) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center">
+        {/* Spinner simples com CSS do Tailwind */}
+        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-600 mb-4"></div>
+        <p className="text-gray-500 font-medium">Verificando assinatura...</p>
+      </div>
+    );
+  }
+
+  // --- TELA DE ASSINANTE ---
   if (subscription) {
     return (
       <div className="min-h-screen bg-gray-50 py-12 px-4 flex justify-center items-center">
-        <div className="bg-white max-w-lg w-full rounded-3xl shadow-xl border border-blue-100 p-8 text-center relative overflow-hidden">
-          
+        <div className="bg-white max-w-lg w-full rounded-3xl shadow-xl border border-blue-100 p-8 text-center">
           <div className="bg-green-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
             <span className="text-4xl">💎</span>
           </div>
-
-          <h2 className="text-3xl font-extrabold text-gray-900 mb-2">
-            Você é <span className="text-blue-600">PRO</span>!
-          </h2>
-          <p className="text-gray-500 mb-8">
-            Sua assinatura está ativa e você tem acesso ilimitado a todos os recursos.
-          </p>
-
+          <h2 className="text-3xl font-extrabold text-gray-900 mb-2">Você é <span className="text-blue-600">PRO</span>!</h2>
+          <p className="text-gray-500 mb-8">Sua assinatura está ativa.</p>
+          
           <div className="bg-gray-50 rounded-xl p-6 text-left space-y-3 mb-8">
-            <div className="flex justify-between border-b border-gray-200 pb-2">
+             <div className="flex justify-between border-b border-gray-200 pb-2">
               <span className="text-gray-500 text-sm">Status</span>
-              <span className="text-green-600 font-bold bg-green-100 px-2 py-0.5 rounded text-xs uppercase">
-                Ativo
-              </span>
-            </div>
-            <div className="flex justify-between border-b border-gray-200 pb-2">
-              <span className="text-gray-500 text-sm">Plano</span>
-              <span className="font-medium text-gray-900 capitalize">
-                {subscription.plan_type === 'annual' ? 'Anual' : 'Mensal'}
-              </span>
+              <span className="text-green-600 font-bold bg-green-100 px-2 py-0.5 rounded text-xs uppercase">Ativo</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500 text-sm">Desde</span>
-              <span className="font-medium text-gray-900">
-                {new Date(subscription.updated_at).toLocaleDateString('pt-BR')}
-              </span>
+              <span className="text-gray-500 text-sm">Plano</span>
+              <span className="font-medium text-gray-900 capitalize">{subscription.plan_type === 'annual' ? 'Anual' : 'Mensal'}</span>
             </div>
           </div>
 
-          <button 
-            onClick={handleCancel}
-            disabled={loading}
-            className="text-red-400 text-sm hover:text-red-600 transition-colors underline hover:bg-red-50 px-4 py-2 rounded-lg w-full"
-          >
-            {loading ? "Cancelando..." : "Cancelar Assinatura"}
+          <button onClick={handleCancel} disabled={loading} className="text-red-400 text-sm hover:text-red-600 underline w-full">
+            {loading ? "Processando..." : "Cancelar Assinatura"}
           </button>
         </div>
       </div>
     );
   }
 
-  // --- RENDERIZAÇÃO: TELA DE VENDAS (Se for Free) ---
+  // --- TELA DE VENDAS ---
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 flex justify-center items-center">
       <div className="max-w-5xl w-full grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-        
-        {/* Lado Esquerdo: Argumentos de Venda */}
         <div className="space-y-8">
           <div>
-            <h1 className="text-4xl font-extrabold text-gray-900 mb-4 leading-tight">
-              O melhor preço do mercado: <span className="text-blue-600">R$ 19,99</span>
-            </h1>
-            <p className="text-lg text-gray-600">
-              Custo-benefício imbatível. Profissionalize seus orçamentos pelo preço de um lanche.
-            </p>
+            <h1 className="text-4xl font-extrabold text-gray-900 mb-4">O melhor preço: <span className="text-blue-600">R$ 19,99</span></h1>
+            <p className="text-lg text-gray-600">Profissionalize seus orçamentos.</p>
           </div>
-
-          <div className="space-y-5">
-            {[
-              "Orçamentos ILIMITADOS",
-              "Cadastro de Clientes e Produtos",
-              "Sua Logo e Cores nos PDFs",
-              "Suporte Prioritário"
-            ].map((item, index) => (
-              <div key={index} className="flex items-center gap-3">
-                <div className="bg-green-100 p-1.5 rounded-full text-green-700 text-xs">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                </div>
-                <span className="text-gray-700 font-medium text-lg">{item}</span>
-              </div>
-            ))}
+          <div className="space-y-4">
+             {["Orçamentos ILIMITADOS", "Cadastro de Clientes", "Sua Logo nos PDFs", "Suporte Prioritário"].map((item, i) => (
+               <div key={i} className="flex gap-3 items-center"><span className="text-green-500">✔</span><span>{item}</span></div>
+             ))}
           </div>
-
-          {/* NOVO: Aviso de tempo de processamento */}
           <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded text-sm text-blue-700">
             <strong>ℹ️ Importante:</strong> A liberação ocorre automaticamente em alguns segundos após o pagamento.
           </div>
-
-          <div className="flex items-center gap-4 pt-4 border-t border-gray-200">
-            <span className="text-2xl">🛡️</span>
-            <p className="text-sm text-gray-500">
-              <strong>Compra Segura.</strong> Seus dados protegidos.
-            </p>
-          </div>
         </div>
 
-        {/* Lado Direito: Card de Preço */}
-        <div className="bg-white rounded-3xl shadow-2xl border border-blue-100 overflow-hidden relative transform transition-all hover:scale-[1.01]">
-          
-          {billingCycle === "annual" && (
-            <div className="bg-blue-600 text-white text-center text-xs font-bold py-2 tracking-widest uppercase">
-              Melhor Custo-Benefício
-            </div>
-          )}
+        <div className="bg-white rounded-3xl shadow-xl border border-blue-100 p-8 text-center">
+           <div className="flex justify-center mb-8 bg-gray-100 p-1 rounded-xl inline-flex">
+              <button onClick={() => setBillingCycle("monthly")} className={`px-6 py-2 rounded-lg text-sm font-bold ${billingCycle === "monthly" ? "bg-white shadow" : "text-gray-500"}`}>Mensal</button>
+              <button onClick={() => setBillingCycle("annual")} className={`px-6 py-2 rounded-lg text-sm font-bold ${billingCycle === "annual" ? "bg-white text-blue-900 shadow" : "text-gray-500"}`}>Anual (-17%)</button>
+           </div>
+           
+           <div className="text-5xl font-extrabold text-gray-900 mb-2">R$ {currentPlan.displayPrice}</div>
+           <p className="text-gray-500 mb-6">{currentPlan.periodLabel}</p>
 
-          <div className="p-8 text-center">
-            {/* Toggle Switch */}
-            <div className="flex justify-center mb-8">
-              <div className="bg-gray-100 p-1 rounded-xl inline-flex relative w-full max-w-xs">
-                <button
-                  onClick={() => setBillingCycle("monthly")}
-                  className={`w-1/2 py-2 rounded-lg text-sm font-bold transition-all duration-300 ${
-                    billingCycle === "monthly" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  Mensal
-                </button>
-                <button
-                  onClick={() => setBillingCycle("annual")}
-                  className={`w-1/2 py-2 rounded-lg text-sm font-bold transition-all duration-300 relative ${
-                    billingCycle === "annual" ? "bg-white text-blue-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  Anual
-                  <span className="absolute -top-3 -right-3 bg-green-500 text-white text-[10px] px-2 py-0.5 rounded-full border-2 border-white">
-                    -17%
-                  </span>
-                </button>
-              </div>
-            </div>
+           <div className="space-y-3 mb-6 text-left">
+             <input className="w-full border rounded p-2" placeholder="Nome" value={userData.name} onChange={e => setUserData({...userData, name: e.target.value})} />
+             <input className="w-full border rounded p-2" placeholder="CPF" maxLength={14} value={userData.cpf} onChange={e => setUserData({...userData, cpf: e.target.value})} />
+           </div>
 
-            {/* Display do Preço */}
-            <div className="mb-2">
-              <div className="flex justify-center items-end gap-1">
-                <span className="text-2xl font-bold text-gray-400 pb-2">R$</span>
-                <span className="text-6xl font-extrabold text-gray-900 leading-none">
-                  {currentPlan.displayPrice}
-                </span>
-                <span className="text-xl font-medium text-gray-500 pb-2">
-                  {currentPlan.periodLabel}
-                </span>
-              </div>
-            </div>
-
-            <div className="h-12 mb-6">
-              {billingCycle === "annual" ? (
-                <>
-                  <p className="text-sm text-gray-500">{currentPlan.subLabel}</p>
-                  <p className="text-green-600 text-sm font-bold bg-green-50 inline-block px-3 py-1 rounded-full mt-1">
-                    {currentPlan.savings}
-                  </p>
-                </>
-              ) : (
-                <p className="text-gray-400 text-sm mt-2">Cancele quando quiser.</p>
-              )}
-            </div>
-
-            {/* Inputs */}
-            <div className="space-y-3 text-left bg-gray-50 p-5 rounded-2xl mb-6 border border-gray-100">
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase ml-1">Nome Completo</label>
-                <input 
-                  type="text" 
-                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-sm mt-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  value={userData.name}
-                  onChange={e => setUserData({...userData, name: e.target.value})}
-                  placeholder="Seu nome"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase ml-1">CPF</label>
-                <input 
-                  type="text" 
-                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-sm mt-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  value={userData.cpf}
-                  onChange={e => setUserData({...userData, cpf: e.target.value})}
-                  placeholder="000.000.000-00"
-                  maxLength={14}
-                />
-              </div>
-            </div>
-
-            <button
-              onClick={handlePayment}
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold py-4 rounded-xl transition-all transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed shadow-lg hover:shadow-blue-200 flex justify-center items-center gap-2"
-            >
-              {loading ? "Processando..." : (
-                <><span>Assinar Agora</span><span>→</span></>
-              )}
-            </button>
-            
-            <p className="text-center text-xs text-gray-400 mt-4">
-              Aceitamos Pix, Boleto e Cartão
-            </p>
-            
-          </div>
+           <button onClick={handlePayment} disabled={loading} className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl hover:bg-blue-700 transition">
+             {loading ? "Aguarde..." : "Assinar Agora →"}
+           </button>
+           <p className="text-xs text-gray-400 mt-4">Pix, Boleto e Cartão</p>
         </div>
       </div>
     </div>
