@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 // Componentes Globais
 import Layout from "./components/Layout";
 import SupportButton from "./components/SupportButton";
+import AdminRoute from "./components/AdminRoute"; // <--- NOVO IMPORT
 
 // Páginas Públicas (Site e Auth)
 import LandingPage from "./pages/LandingPage";
@@ -21,7 +22,7 @@ import Products from "./pages/Products";
 import MyData from "./pages/MyData";
 import Tutorials from "./pages/Tutorials";
 import AdminDashboard from "./pages/admin/AdminDashboard";
-import Subscription from "./pages/Subscription"; // Importado apenas uma vez agora
+import Subscription from "./pages/Subscription";
 
 export default function App() {
   return (
@@ -40,19 +41,20 @@ export default function App() {
         <Route path="/privacy" element={<Privacy />} />
 
         {/* --- ROTAS DA APLICAÇÃO (Sistema SaaS) --- */}
-        {/* O Layout contém a Barra Lateral (Sidebar) */}
         <Route path="/app" element={<Layout />}>
           <Route index element={<Dashboard />} />
           <Route path="new-budget" element={<NewBudget />} />
           <Route path="products" element={<Products />} />
           <Route path="my-data" element={<MyData />} />
           <Route path="tutorials" element={<Tutorials />} />
-          
-          {/* Rota corrigida: acessível em /app/subscription */}
           <Route path="subscription" element={<Subscription />} />
           
-          {/* Rota Admin */}
-          <Route path="admin" element={<AdminDashboard />} />
+          {/* --- ROTA ADMIN PROTEGIDA --- */}
+          {/* Só acessa se passar pelo AdminRoute */}
+          <Route element={<AdminRoute />}>
+             <Route path="admin" element={<AdminDashboard />} />
+          </Route>
+
         </Route>
       </Routes>
     </BrowserRouter>
