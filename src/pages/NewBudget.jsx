@@ -1,10 +1,9 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate, Link } from "react-router-dom";
 import ProductSelector from "../components/ProductSelector";
-import { getProducts } from "../services/storage"; // Produtos locais (ou do banco, se já migrou)
+import { getProducts } from "../services/storage";
 import { generateBudgetPDF } from "../utils/generateBudgetPDF";
 import { saveBudget, getBudgetById, checkFreeLimit } from "../services/budgetService";
-import { supabase } from "../services/supabase";
 
 export default function NewBudget() {
   const [searchParams] = useSearchParams();
@@ -13,7 +12,7 @@ export default function NewBudget() {
 
   // Estado do formulário
   const [budgetId, setBudgetId] = useState(null);
-  const [displayId, setDisplayId] = useState(null); // <--- NOVO: ID Sequencial (ex: 1001)
+  const [displayId, setDisplayId] = useState(null);
   
   const [client, setClient] = useState("");
   const [clientAddress, setClientAddress] = useState("");
@@ -40,12 +39,8 @@ export default function NewBudget() {
   ];
 
   useEffect(() => {
-    // 1. Carregar produtos
-    // Se você já migrou produtos para o Supabase, pode trocar por fetchProducts do banco aqui
     setProducts(getProducts());
 
-    // 2. Carregar dados da empresa (Tenta do LocalStorage primeiro para agilidade)
-    // Depois, na hora de gerar o PDF, o script tenta pegar do objeto completo se tiver
     const savedData = localStorage.getItem("orcasimples_dados");
     if (savedData) {
       const parsed = JSON.parse(savedData);
@@ -54,14 +49,13 @@ export default function NewBudget() {
       if (parsed.validadePadrao) setValidityDays(parsed.validadePadrao);
     }
 
-    // 3. Se for Edição, carregar do Supabase
     async function loadBudget() {
       if (editId) {
         setLoading(true);
         const savedBudget = await getBudgetById(editId);
         if (savedBudget) {
           setBudgetId(savedBudget.id);
-          setDisplayId(savedBudget.display_id); // <--- PEGA O ID #1001 DO BANCO
+          setDisplayId(savedBudget.display_id);
           
           setClient(savedBudget.client_name);
           setClientAddress(savedBudget.client_address || "");
@@ -76,8 +70,10 @@ export default function NewBudget() {
   }, [editId]);
 
   // --- Funções de Itens ---
+
+  // AJUSTE 1: Inicia preço como string vazia para não aparecer "0"
   function addEmptyItem() {
-    setItems([...items, { id: crypto.randomUUID(), description: "", quantity: 1, price: 0 }]);
+    setItems([...items, { id: crypto.randomUUID(), description: "", quantity: 1, price: "" }]);
   }
 
   function updateItem(id, field, value) {
@@ -92,13 +88,15 @@ export default function NewBudget() {
     setItems([...items, { id: crypto.randomUUID(), description: product.name, quantity: 1, price: product.price }]);
   };
 
-  const total = items.reduce((sum, item) => sum + item.quantity * item.price, 0);
+  // AJUSTE 2: Proteção no cálculo para não quebrar com string vazia
+  const total = items.reduce((sum, item) => {
+    const qty = Number(item.quantity) || 0;
+    const price = Number(item.price) || 0;
+    return sum + (qty * price);
+  }, 0);
 
-  // --- AÇÃO 1: GERAR PDF ---
+  // --- AÇÕES ---
   const handleGeneratePDF = () => {
-    // Busca dados atualizados da empresa (pode ter vindo do localStorage ou Supabase)
-    // Se companyData estiver incompleto, o utils/generateBudgetPDF tenta buscar do localStorage
-    
     generateBudgetPDF({
       client,
       clientAddress,
@@ -108,18 +106,15 @@ export default function NewBudget() {
       primaryColor,
       companyData,
       validityDays,
-      displayId: displayId || "PRÉVIA" // Passa o número ou "PRÉVIA" se não salvou
+      displayId: displayId || "PRÉVIA"
     });
   };
 
-  // --- AÇÃO 2: SALVAR NO BANCO ---
   const handleSaveBudget = async () => {
     setLoading(true);
     try {
-      // 1. Verificar Limite Gratuito
-      const isPro = false; // Futuramente checar no perfil
+      const isPro = false;
       
-      // Se é novo (não tem ID) e não é PRO
       if (!isPro && !budgetId && !editId) {
         const count = await checkFreeLimit();
         if (count >= 3) {
@@ -129,7 +124,6 @@ export default function NewBudget() {
         }
       }
 
-      // 2. Montar objeto
       const budgetData = {
         id: budgetId || editId,
         client,
@@ -140,19 +134,12 @@ export default function NewBudget() {
         validityDays
       };
 
-      // 3. Salvar
       const newId = await saveBudget(budgetData);
       setBudgetId(newId);
-      
-      // Nota: O saveBudget retorna o UUID. 
-      // Se quisermos o displayId (#1002) imediatamente após salvar um NOVO, 
-      // precisaríamos recarregar o orçamento.
-      // Para simplificar, mostramos feedback de sucesso. O ID aparece se ele recarregar ou voltar.
       
       setSaveFeedback("Orçamento salvo na nuvem!");
       setTimeout(() => setSaveFeedback(""), 3000);
 
-      // Opcional: Recarregar dados para pegar o ID novo
       if (!displayId) {
          const updated = await getBudgetById(newId);
          if (updated) setDisplayId(updated.display_id);
@@ -253,24 +240,56 @@ export default function NewBudget() {
               <ProductSelector products={products} onSelect={handleProductSelect} />
             </div>
 
+            {/* AJUSTE 3: Cabeçalho da Tabela (Visível apenas em Desktop) */}
+            {items.length > 0 && (
+                <div className="hidden md:flex gap-3 px-3 py-2 text-sm font-bold text-gray-500 uppercase">
+                    <div className="w-6 text-center">#</div>
+                    <div className="flex-grow">Descrição</div>
+                    <div className="w-24 text-center">Qtd</div>
+                    <div className="w-32 text-right">Valor Unit.</div>
+                    <div className="w-10"></div> {/* Espaço para o botão excluir */}
+                </div>
+            )}
+
             <div className="space-y-3">
               {items.map((item, index) => (
                 <div key={item.id} className="flex flex-col md:flex-row gap-3 items-end md:items-center bg-white p-3 rounded-lg border border-gray-200 hover:border-blue-300 transition-colors">
                   <span className="hidden md:block text-gray-400 text-xs w-6 text-center">{index + 1}.</span>
+                  
                   <div className="flex-grow w-full">
                     <label className="md:hidden text-xs text-gray-500 font-bold mb-1">Descrição</label>
-                    <input className="w-full p-2 border border-gray-300 rounded text-sm outline-none focus:border-blue-500" placeholder="Descrição" value={item.description} onChange={(e) => updateItem(item.id, "description", e.target.value)} />
+                    <input 
+                        className="w-full p-2 border border-gray-300 rounded text-sm outline-none focus:border-blue-500" 
+                        placeholder="Descrição" 
+                        value={item.description} 
+                        onChange={(e) => updateItem(item.id, "description", e.target.value)} 
+                    />
                   </div>
+                  
                   <div className="w-full md:w-24">
                     <label className="md:hidden text-xs text-gray-500 font-bold mb-1">Qtd</label>
-                    <input type="number" className="w-full p-2 border border-gray-300 rounded text-sm text-center outline-none focus:border-blue-500" value={item.quantity} onChange={(e) => updateItem(item.id, "quantity", Number(e.target.value))} />
+                    <input 
+                        type="number" 
+                        className="w-full p-2 border border-gray-300 rounded text-sm text-center outline-none focus:border-blue-500" 
+                        value={item.quantity} 
+                        onChange={(e) => updateItem(item.id, "quantity", e.target.value)} 
+                    />
                   </div>
+                  
                   <div className="w-full md:w-32">
                     <label className="md:hidden text-xs text-gray-500 font-bold mb-1">Valor Unit.</label>
-                    <input type="number" className="w-full p-2 border border-gray-300 rounded text-sm text-right outline-none focus:border-blue-500" value={item.price} onChange={(e) => updateItem(item.id, "price", Number(e.target.value))} />
+                    <input 
+                        type="number" 
+                        placeholder="0,00"
+                        className="w-full p-2 border border-gray-300 rounded text-sm text-right outline-none focus:border-blue-500" 
+                        value={item.price} 
+                        // AJUSTE 4: Removemos Number() aqui para permitir string vazia
+                        onChange={(e) => updateItem(item.id, "price", e.target.value)} 
+                    />
                   </div>
+                  
                   <div className="flex justify-end md:w-auto">
-                    <button onClick={() => removeItem(item.id)} className="text-gray-400 hover:text-red-500 p-2 rounded hover:bg-red-50 transition">
+                    <button onClick={() => removeItem(item.id)} className="text-gray-400 hover:text-red-500 p-2 rounded hover:bg-red-50 transition" title="Remover item">
                         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
                   </div>
