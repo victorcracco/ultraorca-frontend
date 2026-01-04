@@ -4,9 +4,8 @@ import { supabase } from "../services/supabase";
 export default function Subscription() {
   const [loading, setLoading] = useState(false);
   const [userData, setUserData] = useState({ name: "", cpf: "", email: "" });
-  
-  // Começa com anual para incentivar o ticket maior
-  const [billingCycle, setBillingCycle] = useState("annual");
+  const [subscription, setSubscription] = useState(null); // Estado para guardar a assinatura
+  const [billingCycle, setBillingCycle] = useState("annual"); // Começa com anual
 
   const plans = {
     monthly: {
@@ -18,7 +17,7 @@ export default function Subscription() {
     },
     annual: {
       totalPrice: 199.99,
-      displayPrice: "16,66", // R$ 199,99 dividido por 12
+      displayPrice: "16,66",
       periodLabel: "/mês*",
       subLabel: "Faturado R$ 199,99 anualmente",
       description: "Assinatura Anual - UltraOrça PRO (2 meses grátis)",
@@ -29,21 +28,35 @@ export default function Subscription() {
   const currentPlan = plans[billingCycle];
 
   useEffect(() => {
-    async function loadUser() {
+    async function loadData() {
       try {
-        const { data } = await supabase.auth.getUser();
-        if (data?.user) {
+        // 1. Pega o Usuário Logado
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (user) {
           setUserData(prev => ({ 
             ...prev, 
-            name: data.user.user_metadata?.full_name || "",
-            email: data.user.email 
+            name: user.user_metadata?.full_name || "",
+            email: user.email 
           }));
+
+          // 2. VERIFICAÇÃO DE ASSINATURA (A Mágica acontece aqui)
+          const { data: subData, error } = await supabase
+            .from('subscriptions')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('status', 'active') // Só queremos saber se está ATIVO
+            .single();
+
+          if (subData) {
+            setSubscription(subData); // Salva que o usuário é PRO
+          }
         }
       } catch (error) {
-        console.log("Usuário não logado", error);
+        console.log("Erro ao carregar dados:", error);
       }
     }
-    loadUser();
+    loadData();
   }, []);
 
   const handlePayment = async () => {
@@ -77,9 +90,7 @@ export default function Subscription() {
       try {
         data = JSON.parse(textResponse);
       } catch (e) {
-        // Se der erro de JSON, provavelmente é aquele erro de "undefined" que apareceu
-        console.error("Erro bruto:", textResponse);
-        throw new Error("Erro de configuração na API (Variáveis de Ambiente faltando).");
+        throw new Error("Erro de comunicação com a API.");
       }
 
       if (!response.ok) {
@@ -98,6 +109,56 @@ export default function Subscription() {
     }
   };
 
+  // --- TELA DE ASSINANTE (Se já pagou, mostra isso) ---
+  if (subscription) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-12 px-4 flex justify-center items-center">
+        <div className="bg-white max-w-lg w-full rounded-3xl shadow-xl border border-blue-100 p-8 text-center relative overflow-hidden">
+          
+          <div className="bg-green-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <span className="text-4xl">💎</span>
+          </div>
+
+          <h2 className="text-3xl font-extrabold text-gray-900 mb-2">
+            Você é <span className="text-blue-600">PRO</span>!
+          </h2>
+          <p className="text-gray-500 mb-8">
+            Sua assinatura está ativa e você tem acesso ilimitado.
+          </p>
+
+          <div className="bg-gray-50 rounded-xl p-6 text-left space-y-3 mb-8">
+            <div className="flex justify-between border-b border-gray-200 pb-2">
+              <span className="text-gray-500 text-sm">Status</span>
+              <span className="text-green-600 font-bold bg-green-100 px-2 py-0.5 rounded text-xs uppercase">
+                Ativo
+              </span>
+            </div>
+            <div className="flex justify-between border-b border-gray-200 pb-2">
+              <span className="text-gray-500 text-sm">Plano</span>
+              <span className="font-medium text-gray-900 capitalize">
+                {subscription.plan_type === 'annual' ? 'Anual' : 'Mensal'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500 text-sm">Desde</span>
+              <span className="font-medium text-gray-900">
+                {new Date(subscription.updated_at).toLocaleDateString('pt-BR')}
+              </span>
+            </div>
+          </div>
+
+          <button 
+            className="text-gray-400 text-sm hover:text-red-500 transition-colors underline"
+            onClick={() => alert("Para cancelar, entre em contato com o suporte ou gerencie pelo painel do Asaas.")}
+          >
+            Gerenciar Assinatura
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // --- TELA DE VENDAS (Se não pagou, mostra isso) ---
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 flex justify-center items-center">
       <div className="max-w-5xl w-full grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
@@ -118,7 +179,6 @@ export default function Subscription() {
               "Orçamentos ILIMITADOS",
               "Cadastro de Clientes e Produtos",
               "Sua Logo e Cores nos PDFs",
-              // REMOVIDO: "Link de Pagamento..."
               "Suporte Prioritário"
             ].map((item, index) => (
               <div key={index} className="flex items-center gap-3">
