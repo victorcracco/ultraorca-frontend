@@ -7,7 +7,11 @@ export default function Subscription() {
   
   const [userData, setUserData] = useState({ name: "", cpf: "", email: "" });
   const [subscription, setSubscription] = useState(null);
+  
+  // NOVO: Controla se o usuário está na tela de "Troca de Plano"
   const [isUpgrading, setIsUpgrading] = useState(false);
+
+  // Estado para controlar qual plano está selecionado
   const [selectedPlanId, setSelectedPlanId] = useState("pro"); 
 
   // Configuração dos Planos
@@ -45,7 +49,7 @@ export default function Subscription() {
 
   const selectedPlan = plans[selectedPlanId];
 
-  // --- Lógica de Verificação ---
+  // --- 1. Lógica de Verificação ---
   const checkSubscription = async (userId) => {
     try {
       const { data: subData } = await supabase
@@ -59,7 +63,9 @@ export default function Subscription() {
         setSubscription(subData);
         return true;
       }
-    } catch (error) {}
+    } catch (error) {
+      // Usuário Free
+    }
     return false;
   };
 
@@ -78,6 +84,7 @@ export default function Subscription() {
           const isPro = await checkSubscription(user.id);
           setCheckingStatus(false);
 
+          // Se não for PRO, continua verificando (polling) caso tenha acabado de pagar
           if (!isPro) {
             intervalId = setInterval(async () => {
               const found = await checkSubscription(user.id);
@@ -88,6 +95,7 @@ export default function Subscription() {
             setCheckingStatus(false);
         }
       } catch (error) {
+        console.error("Erro:", error);
         setCheckingStatus(false);
       }
     }
@@ -95,7 +103,7 @@ export default function Subscription() {
     return () => { if (intervalId) clearInterval(intervalId); };
   }, []);
 
-  // --- Lógica de Pagamento ---
+  // --- 2. Função de Pagamento ---
   const handlePayment = async () => {
     if (!userData.cpf || !userData.name) {
       alert("Por favor, preencha nome e CPF para emitir a nota fiscal.");
@@ -108,17 +116,8 @@ export default function Subscription() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Faça login novamente.");
 
-      // LÓGICA DE PREÇO DINÂMICO (UPGRADE)
-      let finalPrice = selectedPlan.price;
-      let description = selectedPlan.description;
-
-      // Se estiver fazendo upgrade de Starter para Pro, cobra só a diferença
-      if (isUpgrading && subscription?.plan_type === 'starter' && selectedPlanId === 'pro') {
-         const difference = plans.pro.price - plans.starter.price;
-         finalPrice = Math.max(difference, 10.00); // Mínimo de 10 reais ou a diferença exata (R$ 10,00)
-         description = "Upgrade para PRO (Diferença)";
-      }
-
+      // Se for upgrade, idealmente cancelaríamos o anterior antes, 
+      // mas para simplificar, geramos o novo e o Webhook atualiza o banco (upsert).
       const response = await fetch('/api/create-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -127,10 +126,9 @@ export default function Subscription() {
           userEmail: userData.email || user.email,
           customerName: userData.name,
           customerCpf: userData.cpf,
-          value: finalPrice, // Envia o valor ajustado
-          description: description,
-          planType: selectedPlan.id,
-          isUpgrade: isUpgrading // Flag útil para o backend saber que deve cancelar a anterior
+          value: selectedPlan.price,
+          description: selectedPlan.description,
+          planType: selectedPlan.id
         })
       });
 
@@ -149,26 +147,31 @@ export default function Subscription() {
     }
   };
 
+  // --- 3. Cancelamento ---
   const handleCancel = async () => {
-    if (!confirm("Tem certeza que deseja cancelar?")) return;
+    if (!confirm("Tem certeza que deseja cancelar sua assinatura?")) return;
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      // Usando supabase.functions.invoke como corrigimos anteriormente
-      const { error } = await supabase.functions.invoke('cancel-subscription', {
-        body: {}
+      const response = await fetch('/api/cancel-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id })
       });
-      
-      if (error) throw error;
-      
-      alert("Assinatura cancelada.");
-      window.location.reload();
+      if (response.ok) {
+        alert("Assinatura cancelada.");
+        window.location.reload();
+      } else {
+        throw new Error("Erro ao cancelar.");
+      }
     } catch (error) {
-      alert("Erro ao cancelar: " + error.message);
+      alert(error.message);
     } finally {
       setLoading(false);
     }
   };
+
+  // --- RENDERIZAÇÃO ---
 
   if (checkingStatus) {
     return (
@@ -179,7 +182,7 @@ export default function Subscription() {
     );
   }
 
-  // --- TELA DE ASSINANTE ---
+  // >>> TELA DE DETALHES DA ASSINATURA (SE TIVER PAGO E NÃO ESTIVER NO MODO UPGRADE) <<<
   if (subscription && !isUpgrading) {
     const currentPlanName = plans[subscription.plan_type]?.name || "Personalizado";
     const isStarter = subscription.plan_type === 'starter';
@@ -201,26 +204,29 @@ export default function Subscription() {
                 </p>
               </div>
 
-              {/* BOTÃO DE UPGRADE INTELIGENTE */}
-              {isStarter && (
+              {/* LÓGICA DO BOTÃO DE UPGRADE */}
+              {isStarter ? (
                 <button 
                   onClick={() => {
-                    setIsUpgrading(true);
-                    setSelectedPlanId('pro');
+                    setIsUpgrading(true); // Ativa modo upgrade
+                    setSelectedPlanId('pro'); // Já sugere o PRO
                   }}
-                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-8 py-3 rounded-xl font-bold transition shadow-lg animate-pulse transform hover:scale-105 flex flex-col items-center"
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-8 py-3 rounded-xl font-bold transition shadow-lg animate-pulse transform hover:scale-105"
                 >
-                  <span>Fazer Upgrade para PRO 🚀</span>
-                  <span className="text-xs font-normal opacity-90">Pague só a diferença</span>
+                  ✨ Fazer Upgrade para PRO
                 </button>
+              ) : (
+                <div className="text-sm font-medium text-blue-600 bg-blue-50 px-4 py-2 rounded-lg">
+                  Você já tem o melhor plano! 🚀
+                </div>
               )}
             </div>
 
             <hr className="my-8 border-gray-100" />
 
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-               <div className="text-sm text-gray-500">
-                 Gerenciado via Asaas Payments
+               <div className="text-sm text-gray-500 flex items-center gap-2">
+                 <span>🔒</span> Pagamento processado por Asaas
                </div>
                <button 
                 onClick={handleCancel}
@@ -236,10 +242,10 @@ export default function Subscription() {
     );
   }
 
-  // --- TELA DE VENDAS / UPGRADE ---
+  // >>> TELA DE VENDAS / UPGRADE <<<
   return (
     <div className="max-w-7xl mx-auto py-12 px-4">
-      
+      {/* Botão de Voltar (Só aparece se estiver fazendo Upgrade) */}
       {isUpgrading && (
         <button 
           onClick={() => setIsUpgrading(false)}
@@ -251,86 +257,69 @@ export default function Subscription() {
 
       <div className="text-center mb-12">
         <h1 className="text-4xl font-bold text-gray-900 mb-4">
-          {isUpgrading ? "Evolua seu plano hoje" : "Escolha o plano ideal"}
+          {isUpgrading ? "Evolua seu plano" : "Escolha o plano ideal"}
         </h1>
         <p className="text-lg text-gray-500">
-          {isUpgrading ? "Pague apenas a diferença proporcional e libere tudo agora." : "Comece grátis ou profissionalize seu negócio."}
+          {isUpgrading ? "Desbloqueie todo o poder do UltraOrça agora." : "Comece grátis ou profissionalize seu negócio."}
         </p>
       </div>
 
       <div className="grid md:grid-cols-3 gap-6 mb-12">
-        {Object.values(plans).map((plan) => {
-          
-          // Lógica de Preço Diferenciado para o Upgrade
-          let displayPrice = plan.price;
-          let displayLabel = plan.period;
-          let isUpgradeTarget = false;
-
-          if (isUpgrading && subscription?.plan_type === 'starter' && plan.id === 'pro') {
-             displayPrice = (plans.pro.price - plans.starter.price); // R$ 10,00
-             displayLabel = "hoje (Diferença)";
-             isUpgradeTarget = true;
-          }
-
-          // Esconde o plano Starter se já estiver nele e for upgrade
-          if (isUpgrading && plan.id === 'starter') return null;
-
-          return (
-            <div 
-              key={plan.id}
-              onClick={() => setSelectedPlanId(plan.id)}
-              className={`
-                relative p-8 rounded-2xl cursor-pointer transition-all duration-300 border-2 flex flex-col
-                ${selectedPlanId === plan.id 
-                  ? `border-${plan.color}-500 bg-white shadow-xl transform scale-105 z-10` 
-                  : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-md"
-                }
-              `}
-            >
-              {(plan.recommended || plan.badge || isUpgradeTarget) && (
-                <div className={`absolute top-0 right-0 px-3 py-1 rounded-bl-xl rounded-tr-xl text-xs font-bold text-white bg-${plan.color}-500`}>
-                  {isUpgradeTarget ? "PAGUE SÓ A DIFERENÇA" : (plan.badge || "RECOMENDADO")}
-                </div>
-              )}
-
-              <h3 className={`text-xl font-bold mb-2 text-${plan.color === 'gray' ? 'gray-700' : `${plan.color}-600`}`}>
-                {plan.name}
-              </h3>
-              
-              <div className="flex items-baseline gap-1 mb-6">
-                <span className="text-4xl font-extrabold text-gray-900">
-                  {displayPrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </span>
-                <span className="text-xs font-bold text-gray-500 uppercase">{displayLabel}</span>
+        {Object.values(plans).map((plan) => (
+          <div 
+            key={plan.id}
+            onClick={() => setSelectedPlanId(plan.id)}
+            className={`
+              relative p-8 rounded-2xl cursor-pointer transition-all duration-300 border-2 flex flex-col
+              ${selectedPlanId === plan.id 
+                ? `border-${plan.color}-500 bg-white shadow-xl transform scale-105 z-10` 
+                : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-md"
+              }
+            `}
+          >
+            {(plan.recommended || plan.badge) && (
+              <div className={`absolute top-0 right-0 px-3 py-1 rounded-bl-xl rounded-tr-xl text-xs font-bold text-white bg-${plan.color}-500`}>
+                {plan.badge || "RECOMENDADO"}
               </div>
+            )}
 
-              <ul className="space-y-3 mb-8 flex-grow">
-                {plan.features.map((feature, idx) => (
-                  <li key={idx} className="flex items-center gap-3 text-sm text-gray-600">
-                    <span className={`text-${plan.color}-500 font-bold`}>✓</span> 
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-
-              <div className={`w-full py-3 rounded-xl text-center font-bold transition-colors ${
-                selectedPlanId === plan.id 
-                  ? `bg-${plan.color}-600 text-white` 
-                  : "bg-gray-100 text-gray-600 group-hover:bg-gray-200"
-              }`}>
-                {selectedPlanId === plan.id ? "Selecionado" : "Escolher"}
-              </div>
+            <h3 className={`text-xl font-bold mb-2 text-${plan.color === 'gray' ? 'gray-700' : `${plan.color}-600`}`}>
+              {plan.name}
+            </h3>
+            
+            <div className="flex items-baseline gap-1 mb-6">
+              <span className="text-4xl font-extrabold text-gray-900">
+                {plan.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              </span>
+              <span className="text-gray-500">{plan.period}</span>
             </div>
-          );
-        })}
+
+            <ul className="space-y-3 mb-8 flex-grow">
+              {plan.features.map((feature, idx) => (
+                <li key={idx} className="flex items-center gap-3 text-sm text-gray-600">
+                  <span className={`text-${plan.color}-500 font-bold`}>✓</span> 
+                  {feature}
+                </li>
+              ))}
+            </ul>
+
+            <div className={`w-full py-3 rounded-xl text-center font-bold transition-colors ${
+              selectedPlanId === plan.id 
+                ? `bg-${plan.color}-600 text-white` 
+                : "bg-gray-100 text-gray-600 group-hover:bg-gray-200"
+            }`}>
+              {selectedPlanId === plan.id ? "Selecionado" : "Escolher"}
+            </div>
+          </div>
+        ))}
       </div>
 
-      {/* Formulário Pagamento */}
+      {/* Formulário de Pagamento */}
       <div className="bg-white p-8 rounded-2xl shadow-lg border border-blue-100 max-w-3xl mx-auto">
         <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
           <span className="bg-blue-100 text-blue-600 w-8 h-8 rounded-full flex items-center justify-center text-sm">✓</span>
-          {isUpgrading ? "Confirmar Upgrade para:" : "Finalizar Assinatura:"} 
-          <span className="text-blue-600 ml-1">{selectedPlan?.name}</span>
+          {isUpgrading ? "Confirmar Mudança para:" : "Finalizar Assinatura:"} 
+          <span className="text-blue-600 ml-1">{selectedPlan.name}</span>
         </h3>
 
         <div className="grid md:grid-cols-2 gap-4 mb-6">
@@ -363,10 +352,7 @@ export default function Subscription() {
           className="w-full bg-green-600 hover:bg-green-700 text-white text-lg font-bold py-4 rounded-xl transition shadow-lg hover:shadow-green-200 flex justify-center items-center gap-2"
         >
           {loading ? "Processando..." : (
-            // Texto dinâmico no botão
-            isUpgrading && selectedPlanId === 'pro' 
-              ? "Pagar R$ 10,00 e Virar PRO 🚀" 
-              : "Ir para Pagamento Seguro →"
+            isUpgrading ? "Pagar Diferença e Evoluir 🚀" : "Ir para Pagamento Seguro →"
           )}
         </button>
         <p className="text-center text-xs text-gray-400 mt-4">
