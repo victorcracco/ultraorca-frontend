@@ -248,20 +248,41 @@ export default function LandingPage() {
          </div>
       </section>
 
-      {/* --- FOOTER --- */}
-      <footer className="bg-gray-50 py-12">
+ {/* --- FOOTER --- */}
+      <footer className="bg-gray-50 py-12 border-t border-gray-100">
         <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
+          
+          {/* Logo */}
           <div className="flex items-center gap-2 text-xl font-bold text-gray-900">
              <span className="text-2xl">🚀</span> UltraOrça
           </div>
-          <div className="flex gap-8 text-sm font-medium text-gray-600">
+
+          {/* Links Centrais */}
+          <div className="flex flex-wrap justify-center gap-6 md:gap-8 text-sm font-medium text-gray-600">
             <Link to="/terms" className="hover:text-blue-600 transition">Termos de Uso</Link>
             <Link to="/privacy" className="hover:text-blue-600 transition">Privacidade</Link>
+            
+            {/* INSTAGRAM (Novo) */}
+            <a 
+              href="https://www.instagram.com/ultraorcabr/" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="hover:text-blue-600 transition flex items-center gap-1"
+            >
+              Instagram
+            </a>
+
             <a href="mailto:suporte@ultraorca.com" className="hover:text-blue-600 transition">Contato</a>
           </div>
-          <div className="text-gray-400 text-sm">
-             © 2024 UltraOrça. Feito no Brasil 🇧🇷
+
+          {/* Copyright e Créditos */}
+          <div className="text-gray-400 text-sm text-center md:text-right">
+             <p>© 2024 UltraOrça. Feito no Brasil 🇧🇷</p>
+             <p className="text-xs mt-1">
+               Desenvolvido por <a href="https://www.devstarter.com.br/" target="_blank" rel="noopener noreferrer" className="font-bold text-gray-500 hover:text-blue-600 transition">DevStarter</a>
+             </p>
           </div>
+
         </div>
       </footer>
     </div>

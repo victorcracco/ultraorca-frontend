@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate, Link } from "react-router-dom";
 import ProductSelector from "../components/ProductSelector";
 import { getProducts } from "../services/storage";
-import { generateBudgetPDF } from "../utils/generateBudgetPDF";
-import { saveBudget, getBudgetById, checkFreeLimit } from "../services/budgetService";
+// CERTIFIQUE-SE que o arquivo na pasta utils se chama 'pdfGenerator.js'
+import { generateBudgetPDF } from "../utils/generateBudgetPDF.js"; 
+import { saveBudget, getBudgetById, checkPlanLimit } from "../services/budgetService";
 
 export default function NewBudget() {
   const [searchParams] = useSearchParams();
@@ -27,6 +28,7 @@ export default function NewBudget() {
   // Estados de UI e Dados Auxiliares
   const [companyData, setCompanyData] = useState(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [modalMessage, setModalMessage] = useState({ title: "", text: "" }); // Novo estado para mensagem dinâmica
   const [saveFeedback, setSaveFeedback] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -38,9 +40,11 @@ export default function NewBudget() {
     { name: "Verde", value: "#16a34a", bgClass: "bg-green-600" },
   ];
 
+  // --- 1. CARREGAMENTO INICIAL (Banco ou Rascunho) ---
   useEffect(() => {
     setProducts(getProducts());
 
+    // Carrega dados da empresa do cache
     const savedData = localStorage.getItem("orcasimples_dados");
     if (savedData) {
       const parsed = JSON.parse(savedData);
@@ -50,13 +54,13 @@ export default function NewBudget() {
     }
 
     async function loadBudget() {
+      // CENÁRIO A: Edição (Vem do Banco)
       if (editId) {
         setLoading(true);
         const savedBudget = await getBudgetById(editId);
         if (savedBudget) {
           setBudgetId(savedBudget.id);
           setDisplayId(savedBudget.display_id);
-          
           setClient(savedBudget.client_name);
           setClientAddress(savedBudget.client_address || "");
           setItems(savedBudget.items || []); 
@@ -64,14 +68,48 @@ export default function NewBudget() {
           if (savedBudget.validity_days) setValidityDays(String(savedBudget.validity_days));
         }
         setLoading(false);
+      } 
+      // CENÁRIO B: Novo (Tenta pegar do Rascunho Local)
+      else {
+        const draft = localStorage.getItem("budget_draft");
+        if (draft) {
+          try {
+            const parsedDraft = JSON.parse(draft);
+            // Só restaura se tiver conteúdo útil
+            if (parsedDraft.client || parsedDraft.items?.length > 0) {
+              setClient(parsedDraft.client || "");
+              setClientAddress(parsedDraft.clientAddress || "");
+              setItems(parsedDraft.items || []);
+              if (parsedDraft.primaryColor) setPrimaryColor(parsedDraft.primaryColor);
+            }
+          } catch (e) {
+            console.error("Erro ao ler rascunho", e);
+          }
+        }
       }
     }
     loadBudget();
   }, [editId]);
 
-  // --- Funções de Itens ---
+  // --- 2. AUTO-SAVE (Salva no navegador a cada digitação) ---
+  useEffect(() => {
+    // Só salva rascunho se for um orçamento novo (não estamos editando um salvo)
+    if (!editId && !budgetId) {
+      const draftData = {
+        client,
+        clientAddress,
+        items,
+        primaryColor
+      };
+      
+      // Salva se tiver pelo menos nome ou itens
+      if (client || items.length > 0) {
+        localStorage.setItem("budget_draft", JSON.stringify(draftData));
+      }
+    }
+  }, [client, clientAddress, items, primaryColor, editId, budgetId]);
 
-  // AJUSTE 1: Inicia preço como string vazia para não aparecer "0"
+  // --- Funções de Itens ---
   function addEmptyItem() {
     setItems([...items, { id: crypto.randomUUID(), description: "", quantity: 1, price: "" }]);
   }
@@ -88,7 +126,6 @@ export default function NewBudget() {
     setItems([...items, { id: crypto.randomUUID(), description: product.name, quantity: 1, price: product.price }]);
   };
 
-  // AJUSTE 2: Proteção no cálculo para não quebrar com string vazia
   const total = items.reduce((sum, item) => {
     const qty = Number(item.quantity) || 0;
     const price = Number(item.price) || 0;
@@ -96,6 +133,7 @@ export default function NewBudget() {
   }, 0);
 
   // --- AÇÕES ---
+  
   const handleGeneratePDF = () => {
     generateBudgetPDF({
       client,
@@ -106,20 +144,34 @@ export default function NewBudget() {
       primaryColor,
       companyData,
       validityDays,
-      displayId: displayId || "PRÉVIA"
+      // ⚠️ AQUI ESTÁ A CORREÇÃO DO "PRÉVIA":
+      // Passamos null se não tiver ID. O pdfGenerator vai criar um nome com data/hora.
+      displayId: displayId || null 
     });
   };
 
   const handleSaveBudget = async () => {
     setLoading(true);
     try {
-      const isPro = false;
-      
-      if (!isPro && !budgetId && !editId) {
-        const count = await checkFreeLimit();
-        if (count >= 3) {
-          setShowUpgradeModal(true);
+      // 1. VERIFICAÇÃO DE PLANO (Limites)
+      if (!budgetId && !editId) {
+        const check = await checkPlanLimit();
+        
+        if (!check.allowed) {
           setLoading(false);
+          // Mensagem personalizada baseada no plano
+          if (check.plan === 'starter') {
+            setModalMessage({
+              title: "Limite Mensal Atingido",
+              text: "Você atingiu o limite de 30 orçamentos do plano Iniciante neste mês. Faça o upgrade para o PRO e tenha acesso ilimitado."
+            });
+          } else {
+            setModalMessage({
+              title: "Limite Gratuito Atingido",
+              text: "Você já usou seus 3 orçamentos gratuitos de teste. Assine um plano para continuar criando."
+            });
+          }
+          setShowUpgradeModal(true);
           return;
         }
       }
@@ -137,6 +189,9 @@ export default function NewBudget() {
       const newId = await saveBudget(budgetData);
       setBudgetId(newId);
       
+      // --- 3. LIMPEZA DO RASCUNHO APÓS SALVAR ---
+      localStorage.removeItem("budget_draft");
+
       setSaveFeedback("Orçamento salvo na nuvem!");
       setTimeout(() => setSaveFeedback(""), 3000);
 
@@ -147,7 +202,7 @@ export default function NewBudget() {
 
     } catch (error) {
       console.error("Erro ao salvar:", error);
-      alert("Erro ao salvar orçamento. Verifique se você está logado.");
+      alert("Erro ao salvar orçamento. Verifique sua conexão.");
     } finally {
       setLoading(false);
     }
@@ -165,17 +220,17 @@ export default function NewBudget() {
   return (
     <div className="max-w-7xl mx-auto p-6 relative">
       
-      {/* MODAL UPGRADE */}
+      {/* MODAL UPGRADE / LIMITE */}
       {showUpgradeModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center animate-fade-in-up">
             <div className="bg-yellow-100 text-yellow-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">🔒</div>
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">Limite Atingido</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">{modalMessage.title || "Limite Atingido"}</h2>
             <p className="text-gray-600 mb-6">
-              Você já usou seus 3 orçamentos gratuitos. Assine o plano PRO para liberar acesso ilimitado.
+              {modalMessage.text || "Faça um upgrade para continuar criando orçamentos."}
             </p>
             <Link to="/app/subscription" className="block w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg mb-3">
-              Liberar Agora
+              Ver Planos
             </Link>
             <button onClick={() => setShowUpgradeModal(false)} className="text-gray-400 text-sm hover:text-gray-600 underline">Cancelar</button>
           </div>
@@ -189,9 +244,13 @@ export default function NewBudget() {
             <div>
                 <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3">
                     {editId || budgetId ? "Editar Orçamento" : "Novo Orçamento"}
-                    {displayId && (
+                    {displayId ? (
                         <span className="bg-blue-100 text-blue-700 text-lg px-3 py-1 rounded-full font-mono">
                             #{displayId}
+                        </span>
+                    ) : (
+                        <span className="bg-gray-100 text-gray-500 text-xs px-2 py-1 rounded uppercase tracking-wide">
+                            Rascunho
                         </span>
                     )}
                 </h1>
@@ -240,14 +299,13 @@ export default function NewBudget() {
               <ProductSelector products={products} onSelect={handleProductSelect} />
             </div>
 
-            {/* AJUSTE 3: Cabeçalho da Tabela (Visível apenas em Desktop) */}
             {items.length > 0 && (
                 <div className="hidden md:flex gap-3 px-3 py-2 text-sm font-bold text-gray-500 uppercase">
                     <div className="w-6 text-center">#</div>
                     <div className="flex-grow">Descrição</div>
                     <div className="w-24 text-center">Qtd</div>
                     <div className="w-32 text-right">Valor Unit.</div>
-                    <div className="w-10"></div> {/* Espaço para o botão excluir */}
+                    <div className="w-10"></div> 
                 </div>
             )}
 
@@ -283,7 +341,6 @@ export default function NewBudget() {
                         placeholder="0,00"
                         className="w-full p-2 border border-gray-300 rounded text-sm text-right outline-none focus:border-blue-500" 
                         value={item.price} 
-                        // AJUSTE 4: Removemos Number() aqui para permitir string vazia
                         onChange={(e) => updateItem(item.id, "price", e.target.value)} 
                     />
                   </div>
