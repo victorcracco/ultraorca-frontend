@@ -19,7 +19,8 @@ const formatCurrency = (value) =>
 const formatDate = (date) =>
   new Intl.DateTimeFormat("pt-BR").format(date);
 
-export function generateBudgetPDF({
+// ⚠️ ATENÇÃO: Adicionei 'async' aqui no início da função
+export async function generateBudgetPDF({
   client,
   clientAddress = "",
   items = [],
@@ -28,13 +29,12 @@ export function generateBudgetPDF({
   primaryColor = "#2563eb",
   companyData = null,
   validityDays = 15,
-  displayId = null // Novo parâmetro para o ID #1000
+  displayId = null 
 }) {
   try {
     // 1. Tenta usar os dados passados, se não, busca do localStorage
     let company = companyData || {};
     if (!company.company_name && !company.nomeEmpresa) {
-        // Tenta buscar do localstorage se não vier completo
         const saved = localStorage.getItem("orcasimples_dados");
         if (saved) {
             const localData = JSON.parse(saved);
@@ -42,11 +42,10 @@ export function generateBudgetPDF({
         }
     }
     
-    // Normaliza os nomes dos campos (Supabase vs LocalStorage)
+    // Normaliza os nomes dos campos
     const nomeEmpresa = company.company_name || company.nomeEmpresa || "Sua Empresa";
     const telefone = company.phone || company.telefone || "";
     const enderecoEmpresa = company.address || company.endereco || "";
-    // Logo pode vir como 'logo_url' (Supabase) ou 'logo' (LocalStorage)
     const logoImg = company.logo_url || company.logo; 
 
     const doc = new jsPDF();
@@ -79,7 +78,7 @@ export function generateBudgetPDF({
     doc.setTextColor(...PRIMARY_COLOR);
     doc.text("ORÇAMENTO", pageWidth - marginX, y + 10, { align: "right" });
 
-    // ID do Orçamento (Se existir)
+    // ID do Orçamento
     if (displayId) {
         doc.setFontSize(12);
         doc.setTextColor(100, 100, 100);
@@ -90,7 +89,6 @@ export function generateBudgetPDF({
     doc.setFontSize(10);
     doc.setTextColor(...TEXT_COLOR);
     
-    // Ajusta Y dependendo se mostrou o ID ou não
     let yEmpresa = displayId ? y + 24 : y + 18;
 
     doc.text(nomeEmpresa, pageWidth - marginX, yEmpresa, { align: "right" });
@@ -166,21 +164,17 @@ export function generateBudgetPDF({
     const finalY = doc.lastAutoTable.finalY + 10;
 
     /* ================= TOTAL ================= */
-    // Garante que não quebre página se estiver no final
     if (finalY > pageHeight - 30) {
         doc.addPage();
         doc.setFillColor(...PRIMARY_COLOR);
-        doc.rect(0, 0, pageWidth, 6, "F"); // Repete a faixa no topo
+        doc.rect(0, 0, pageWidth, 6, "F");
     }
 
     doc.setFontSize(14);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(...PRIMARY_COLOR);
-    
-    // Posiciona o Label "TOTAL GERAL"
-    doc.text("TOTAL GERAL", pageWidth - marginX - 60, finalY + 5); // Afastei mais para a esquerda (-60)
+    doc.text("TOTAL GERAL", pageWidth - marginX - 60, finalY + 5);
 
-    // Posiciona o Valor
     doc.setTextColor(0, 0, 0);
     doc.text(formatCurrency(total), pageWidth - marginX, finalY + 5, { align: "right" });
 
@@ -191,9 +185,43 @@ export function generateBudgetPDF({
     const footerText = "Gerado via UltraOrça - ultraorca.com.br";
     doc.text(footerText, pageWidth / 2, pageHeight - 10, { align: "center" });
 
-    // Salvar
-    const safeName = (client || "orcamento").replace(/[^a-z0-9]/gi, "_").toLowerCase();
-    doc.save(`Orcamento_${displayId ? displayId + '_' : ''}${safeName}.pdf`);
+    /* ================= SALVAR / COMPARTILHAR ================= */
+// 1. Limpeza rigorosa do nome do arquivo
+    const cleanClient = (client || "cliente").trim().replace(/[^a-zA-Z0-9À-ÿ\s]/g, "").replace(/\s+/g, "_");
+    // Exemplo: Orcamento_1050_Joao_Silva.pdf
+    const fileName = `Orcamento_${displayId ? displayId + '_' : ''}${cleanClient}.pdf`;
+
+    // 2. Tenta Compartilhamento Nativo (Celular)
+    if (navigator.share && navigator.canShare) {
+        try {
+            // Gera o Blob do PDF
+            const blob = doc.output('blob');
+            
+            // Cria um Arquivo Real com o nome correto
+            // 'type' application/pdf é crucial para o WhatsApp reconhecer
+            const file = new File([blob], fileName, { type: "application/pdf" });
+
+            const shareData = {
+                files: [file],
+                title: fileName, // Alguns Androids usam isso
+                text: `Segue orçamento para ${client}.`,
+            };
+
+            // Verifica se o navegador aceita esse arquivo
+            if (navigator.canShare(shareData)) {
+                await navigator.share(shareData);
+                return; // Sucesso, não faz download
+            }
+        } catch (error) {
+            // Se o usuário cancelar ou o navegador não suportar, ignora e cai pro download
+            if (error.name !== 'AbortError') {
+                console.warn("Share falhou, tentando download tradicional...", error);
+            }
+        }
+    }
+
+    // 3. Fallback: Download Tradicional (Desktop ou se o Share falhar)
+    doc.save(fileName);
 
   } catch (error) {
     console.error("Erro ao gerar PDF:", error);

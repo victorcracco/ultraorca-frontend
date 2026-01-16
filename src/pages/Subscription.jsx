@@ -2,34 +2,54 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../services/supabase";
 
 export default function Subscription() {
-  const [loading, setLoading] = useState(false); // Loading do botão de ação
-  const [checkingStatus, setCheckingStatus] = useState(true); // Loading da TELA (evita o pisca)
+  const [loading, setLoading] = useState(false);
+  const [checkingStatus, setCheckingStatus] = useState(true);
   
   const [userData, setUserData] = useState({ name: "", cpf: "", email: "" });
   const [subscription, setSubscription] = useState(null);
-  const [billingCycle, setBillingCycle] = useState("annual");
+  
+  // NOVO: Controla se o usuário está na tela de "Troca de Plano"
+  const [isUpgrading, setIsUpgrading] = useState(false);
 
+  // Estado para controlar qual plano está selecionado
+  const [selectedPlanId, setSelectedPlanId] = useState("pro"); 
+
+  // Configuração dos Planos
   const plans = {
-    monthly: {
-      totalPrice: 19.99,
-      displayPrice: "19,99",
-      periodLabel: "/mês",
-      description: "Assinatura Mensal - UltraOrça PRO",
-      savings: null
+    starter: {
+      id: "starter",
+      name: "Iniciante",
+      price: 19.99,
+      period: "/mês",
+      description: "Plano Iniciante (30 orçamentos)",
+      features: ["30 orçamentos/mês", "PDF Padrão", "Suporte Básico"],
+      color: "gray"
+    },
+    pro: {
+      id: "pro",
+      name: "Profissional",
+      price: 29.99,
+      period: "/mês",
+      description: "Plano PRO - Ilimitado",
+      features: ["Orçamentos Ilimitados", "Sem marca d'água", "Cadastro de Produtos", "Suporte Prioritário"],
+      color: "blue",
+      recommended: true
     },
     annual: {
-      totalPrice: 199.99,
-      displayPrice: "16,66",
-      periodLabel: "/mês*",
-      subLabel: "Faturado R$ 199,99 anualmente",
-      description: "Assinatura Anual - UltraOrça PRO (2 meses grátis)",
-      savings: "Economize R$ 40,00/ano"
+      id: "annual",
+      name: "Anual PRO",
+      price: 299.00,
+      period: "/ano",
+      description: "Plano Anual (2 meses grátis)",
+      features: ["Tudo do PRO", "2 Meses Grátis", "Pagamento Único"],
+      color: "green",
+      badge: "Economize R$ 60"
     }
   };
 
-  const currentPlan = plans[billingCycle];
+  const selectedPlan = plans[selectedPlanId];
 
-  // Função auxiliar para verificar assinatura no banco
+  // --- 1. Lógica de Verificação ---
   const checkSubscription = async (userId) => {
     try {
       const { data: subData } = await supabase
@@ -44,19 +64,16 @@ export default function Subscription() {
         return true;
       }
     } catch (error) {
-      // Ignora erro se não encontrar (usuário é Free)
+      // Usuário Free
     }
     return false;
   };
 
   useEffect(() => {
     let intervalId;
-
     async function init() {
       try {
-        // 1. Pega usuário logado
         const { data: { user } } = await supabase.auth.getUser();
-        
         if (user) {
           setUserData(prev => ({ 
             ...prev, 
@@ -64,40 +81,29 @@ export default function Subscription() {
             email: user.email 
           }));
 
-          // 2. Verifica status IMEDIATAMENTE (Segura a tela no loading)
           const isPro = await checkSubscription(user.id);
-          
-          // Só agora libera a tela! 
-          // Se for PRO, 'subscription' já está preenchido, então vai direto pra tela PRO.
-          // Se for Free, vai pra tela de vendas.
           setCheckingStatus(false);
 
-          // 3. Se ainda for Free, liga o radar (Polling) para pegar pagamento recente
+          // Se não for PRO, continua verificando (polling) caso tenha acabado de pagar
           if (!isPro) {
             intervalId = setInterval(async () => {
               const found = await checkSubscription(user.id);
-              if (found) {
-                clearInterval(intervalId); // Achou! Para de buscar e a tela atualiza sozinha
-              }
+              if (found) clearInterval(intervalId);
             }, 3000);
           }
         } else {
-            // Se não tiver usuário, libera para tela de vendas (ou login)
             setCheckingStatus(false);
         }
       } catch (error) {
-        console.error("Erro inicial:", error);
+        console.error("Erro:", error);
         setCheckingStatus(false);
       }
     }
-
     init();
-
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
+    return () => { if (intervalId) clearInterval(intervalId); };
   }, []);
 
+  // --- 2. Função de Pagamento ---
   const handlePayment = async () => {
     if (!userData.cpf || !userData.name) {
       alert("Por favor, preencha nome e CPF para emitir a nota fiscal.");
@@ -108,8 +114,10 @@ export default function Subscription() {
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Usuário não logado.");
+      if (!user) throw new Error("Faça login novamente.");
 
+      // Se for upgrade, idealmente cancelaríamos o anterior antes, 
+      // mas para simplificar, geramos o novo e o Webhook atualiza o banco (upsert).
       const response = await fetch('/api/create-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -118,9 +126,9 @@ export default function Subscription() {
           userEmail: userData.email || user.email,
           customerName: userData.name,
           customerCpf: userData.cpf,
-          value: currentPlan.totalPrice,
-          description: currentPlan.description,
-          planType: billingCycle
+          value: selectedPlan.price,
+          description: selectedPlan.description,
+          planType: selectedPlan.id
         })
       });
 
@@ -139,239 +147,217 @@ export default function Subscription() {
     }
   };
 
+  // --- 3. Cancelamento ---
   const handleCancel = async () => {
     if (!confirm("Tem certeza que deseja cancelar sua assinatura?")) return;
-
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
       const response = await fetch('/api/cancel-subscription', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id })
       });
-
       if (response.ok) {
-        alert("Assinatura cancelada com sucesso.");
+        alert("Assinatura cancelada.");
         window.location.reload();
       } else {
-        throw new Error("Erro ao cancelar. Tente novamente.");
+        throw new Error("Erro ao cancelar.");
       }
     } catch (error) {
-      alert("Erro: " + error.message);
+      alert(error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // --- 1. TELA DE LOADING (EVITA O PISCA) ---
+  // --- RENDERIZAÇÃO ---
+
   if (checkingStatus) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-600 mb-4"></div>
-        <p className="text-gray-500 font-medium animate-pulse">Verificando assinatura...</p>
+        <p className="text-gray-500 font-medium">Carregando...</p>
       </div>
     );
   }
 
-  // --- 2. TELA DE ASSINANTE (LAYOUT BONITO RESTAURADO) ---
-  if (subscription) {
+  // >>> TELA DE DETALHES DA ASSINATURA (SE TIVER PAGO E NÃO ESTIVER NO MODO UPGRADE) <<<
+  if (subscription && !isUpgrading) {
+    const currentPlanName = plans[subscription.plan_type]?.name || "Personalizado";
+    const isStarter = subscription.plan_type === 'starter';
+
     return (
-      <div className="min-h-screen bg-gray-50 py-12 px-4 flex justify-center items-center">
-        <div className="bg-white max-w-lg w-full rounded-3xl shadow-xl border border-blue-100 p-8 text-center relative overflow-hidden">
-          
-          <div className="bg-green-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
-            <span className="text-4xl">💎</span>
+      <div className="max-w-4xl mx-auto py-12 px-4">
+        <h1 className="text-3xl font-bold text-gray-800 mb-8">Minha Assinatura</h1>
+        
+        <div className="bg-white rounded-2xl shadow-lg border border-blue-100 overflow-hidden">
+          <div className="p-8">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <h2 className="text-2xl font-bold text-gray-900">Plano {currentPlanName}</h2>
+                  <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide">Ativo</span>
+                </div>
+                <p className="text-gray-500">
+                  Renova em: {new Date(new Date(subscription.updated_at).setMonth(new Date(subscription.updated_at).getMonth() + 1)).toLocaleDateString('pt-BR')}
+                </p>
+              </div>
+
+              {/* LÓGICA DO BOTÃO DE UPGRADE */}
+              {isStarter ? (
+                <button 
+                  onClick={() => {
+                    setIsUpgrading(true); // Ativa modo upgrade
+                    setSelectedPlanId('pro'); // Já sugere o PRO
+                  }}
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-8 py-3 rounded-xl font-bold transition shadow-lg animate-pulse transform hover:scale-105"
+                >
+                  ✨ Fazer Upgrade para PRO
+                </button>
+              ) : (
+                <div className="text-sm font-medium text-blue-600 bg-blue-50 px-4 py-2 rounded-lg">
+                  Você já tem o melhor plano! 🚀
+                </div>
+              )}
+            </div>
+
+            <hr className="my-8 border-gray-100" />
+
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+               <div className="text-sm text-gray-500 flex items-center gap-2">
+                 <span>🔒</span> Pagamento processado por Asaas
+               </div>
+               <button 
+                onClick={handleCancel}
+                disabled={loading}
+                className="text-red-500 hover:text-red-700 hover:bg-red-50 px-4 py-2 rounded-lg text-sm font-medium transition"
+              >
+                {loading ? "Processando..." : "Cancelar Assinatura"}
+              </button>
+            </div>
           </div>
-
-          <h2 className="text-3xl font-extrabold text-gray-900 mb-2">
-            Você é <span className="text-blue-600">PRO</span>!
-          </h2>
-          <p className="text-gray-500 mb-8">
-            Sua assinatura está ativa e você tem acesso ilimitado.
-          </p>
-
-          <div className="bg-gray-50 rounded-xl p-6 text-left space-y-3 mb-8">
-            <div className="flex justify-between border-b border-gray-200 pb-2">
-              <span className="text-gray-500 text-sm">Status</span>
-              <span className="text-green-600 font-bold bg-green-100 px-2 py-0.5 rounded text-xs uppercase">
-                Ativo
-              </span>
-            </div>
-            <div className="flex justify-between border-b border-gray-200 pb-2">
-              <span className="text-gray-500 text-sm">Plano</span>
-              <span className="font-medium text-gray-900 capitalize">
-                {subscription.plan_type === 'annual' ? 'Anual' : 'Mensal'}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500 text-sm">Desde</span>
-              <span className="font-medium text-gray-900">
-                {new Date(subscription.updated_at).toLocaleDateString('pt-BR')}
-              </span>
-            </div>
-          </div>
-
-          <button 
-            onClick={handleCancel}
-            disabled={loading}
-            className="text-red-400 text-sm hover:text-red-600 transition-colors underline hover:bg-red-50 px-4 py-2 rounded-lg w-full"
-          >
-            {loading ? "Cancelando..." : "Cancelar Assinatura"}
-          </button>
         </div>
       </div>
     );
   }
 
-  // --- 3. TELA DE VENDAS (LAYOUT BONITO RESTAURADO) ---
+  // >>> TELA DE VENDAS / UPGRADE <<<
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 flex justify-center items-center">
-      <div className="max-w-5xl w-full grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-        
-        {/* Lado Esquerdo: Argumentos de Venda */}
-        <div className="space-y-8">
+    <div className="max-w-7xl mx-auto py-12 px-4">
+      {/* Botão de Voltar (Só aparece se estiver fazendo Upgrade) */}
+      {isUpgrading && (
+        <button 
+          onClick={() => setIsUpgrading(false)}
+          className="mb-6 flex items-center text-gray-500 hover:text-gray-800 transition"
+        >
+          ← Voltar para minha assinatura
+        </button>
+      )}
+
+      <div className="text-center mb-12">
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">
+          {isUpgrading ? "Evolua seu plano" : "Escolha o plano ideal"}
+        </h1>
+        <p className="text-lg text-gray-500">
+          {isUpgrading ? "Desbloqueie todo o poder do UltraOrça agora." : "Comece grátis ou profissionalize seu negócio."}
+        </p>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-6 mb-12">
+        {Object.values(plans).map((plan) => (
+          <div 
+            key={plan.id}
+            onClick={() => setSelectedPlanId(plan.id)}
+            className={`
+              relative p-8 rounded-2xl cursor-pointer transition-all duration-300 border-2 flex flex-col
+              ${selectedPlanId === plan.id 
+                ? `border-${plan.color}-500 bg-white shadow-xl transform scale-105 z-10` 
+                : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-md"
+              }
+            `}
+          >
+            {(plan.recommended || plan.badge) && (
+              <div className={`absolute top-0 right-0 px-3 py-1 rounded-bl-xl rounded-tr-xl text-xs font-bold text-white bg-${plan.color}-500`}>
+                {plan.badge || "RECOMENDADO"}
+              </div>
+            )}
+
+            <h3 className={`text-xl font-bold mb-2 text-${plan.color === 'gray' ? 'gray-700' : `${plan.color}-600`}`}>
+              {plan.name}
+            </h3>
+            
+            <div className="flex items-baseline gap-1 mb-6">
+              <span className="text-4xl font-extrabold text-gray-900">
+                {plan.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              </span>
+              <span className="text-gray-500">{plan.period}</span>
+            </div>
+
+            <ul className="space-y-3 mb-8 flex-grow">
+              {plan.features.map((feature, idx) => (
+                <li key={idx} className="flex items-center gap-3 text-sm text-gray-600">
+                  <span className={`text-${plan.color}-500 font-bold`}>✓</span> 
+                  {feature}
+                </li>
+              ))}
+            </ul>
+
+            <div className={`w-full py-3 rounded-xl text-center font-bold transition-colors ${
+              selectedPlanId === plan.id 
+                ? `bg-${plan.color}-600 text-white` 
+                : "bg-gray-100 text-gray-600 group-hover:bg-gray-200"
+            }`}>
+              {selectedPlanId === plan.id ? "Selecionado" : "Escolher"}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Formulário de Pagamento */}
+      <div className="bg-white p-8 rounded-2xl shadow-lg border border-blue-100 max-w-3xl mx-auto">
+        <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+          <span className="bg-blue-100 text-blue-600 w-8 h-8 rounded-full flex items-center justify-center text-sm">✓</span>
+          {isUpgrading ? "Confirmar Mudança para:" : "Finalizar Assinatura:"} 
+          <span className="text-blue-600 ml-1">{selectedPlan.name}</span>
+        </h3>
+
+        <div className="grid md:grid-cols-2 gap-4 mb-6">
           <div>
-            <h1 className="text-4xl font-extrabold text-gray-900 mb-4 leading-tight">
-              O melhor preço do mercado: <span className="text-blue-600">R$ 19,99</span>
-            </h1>
-            <p className="text-lg text-gray-600">
-              Custo-benefício imbatível. Profissionalize seus orçamentos pelo preço de um lanche.
-            </p>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nome Completo</label>
+            <input 
+              type="text" 
+              className="w-full border border-gray-300 rounded-lg p-3 outline-none focus:border-blue-500 transition"
+              value={userData.name}
+              onChange={e => setUserData({...userData, name: e.target.value})}
+              placeholder="Nome na Nota Fiscal"
+            />
           </div>
-
-          <div className="space-y-5">
-            {[
-              "Orçamentos ILIMITADOS",
-              "Cadastro de Clientes e Produtos",
-              "Sua Logo e Cores nos PDFs",
-              "Suporte Prioritário"
-            ].map((item, index) => (
-              <div key={index} className="flex items-center gap-3">
-                <div className="bg-green-100 p-1.5 rounded-full text-green-700 text-xs">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                </div>
-                <span className="text-gray-700 font-medium text-lg">{item}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Aviso de Delay */}
-          <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded text-sm text-blue-700">
-            <strong>ℹ️ Nota:</strong> A liberação ocorre automaticamente em alguns segundos após o pagamento.
-          </div>
-
-          <div className="flex items-center gap-4 pt-4 border-t border-gray-200">
-            <span className="text-2xl">🛡️</span>
-            <p className="text-sm text-gray-500">
-              <strong>Compra Segura.</strong> Seus dados protegidos.
-            </p>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">CPF</label>
+            <input 
+              type="text" 
+              className="w-full border border-gray-300 rounded-lg p-3 outline-none focus:border-blue-500 transition"
+              value={userData.cpf}
+              onChange={e => setUserData({...userData, cpf: e.target.value})}
+              placeholder="000.000.000-00"
+              maxLength={14}
+            />
           </div>
         </div>
 
-        {/* Lado Direito: Card de Preço */}
-        <div className="bg-white rounded-3xl shadow-2xl border border-blue-100 overflow-hidden relative transform transition-all hover:scale-[1.01]">
-          
-          {billingCycle === "annual" && (
-            <div className="bg-blue-600 text-white text-center text-xs font-bold py-2 tracking-widest uppercase">
-              Melhor Custo-Benefício
-            </div>
+        <button
+          onClick={handlePayment}
+          disabled={loading}
+          className="w-full bg-green-600 hover:bg-green-700 text-white text-lg font-bold py-4 rounded-xl transition shadow-lg hover:shadow-green-200 flex justify-center items-center gap-2"
+        >
+          {loading ? "Processando..." : (
+            isUpgrading ? "Pagar Diferença e Evoluir 🚀" : "Ir para Pagamento Seguro →"
           )}
-
-          <div className="p-8 text-center">
-            {/* Toggle Switch */}
-            <div className="flex justify-center mb-8">
-              <div className="bg-gray-100 p-1 rounded-xl inline-flex relative w-full max-w-xs">
-                <button
-                  onClick={() => setBillingCycle("monthly")}
-                  className={`w-1/2 py-2 rounded-lg text-sm font-bold transition-all duration-300 ${
-                    billingCycle === "monthly" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  Mensal
-                </button>
-                <button
-                  onClick={() => setBillingCycle("annual")}
-                  className={`w-1/2 py-2 rounded-lg text-sm font-bold transition-all duration-300 relative ${
-                    billingCycle === "annual" ? "bg-white text-blue-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  Anual
-                  <span className="absolute -top-3 -right-3 bg-green-500 text-white text-[10px] px-2 py-0.5 rounded-full border-2 border-white">
-                    -17%
-                  </span>
-                </button>
-              </div>
-            </div>
-
-            {/* Display do Preço */}
-            <div className="mb-2">
-              <div className="flex justify-center items-end gap-1">
-                <span className="text-2xl font-bold text-gray-400 pb-2">R$</span>
-                <span className="text-6xl font-extrabold text-gray-900 leading-none">
-                  {currentPlan.displayPrice}
-                </span>
-                <span className="text-xl font-medium text-gray-500 pb-2">
-                  {currentPlan.periodLabel}
-                </span>
-              </div>
-            </div>
-
-            <div className="h-12 mb-6">
-              {billingCycle === "annual" ? (
-                <>
-                  <p className="text-sm text-gray-500">{currentPlan.subLabel}</p>
-                  <p className="text-green-600 text-sm font-bold bg-green-50 inline-block px-3 py-1 rounded-full mt-1">
-                    {currentPlan.savings}
-                  </p>
-                </>
-              ) : (
-                <p className="text-gray-400 text-sm mt-2">Cancele quando quiser.</p>
-              )}
-            </div>
-
-            {/* Inputs */}
-            <div className="space-y-3 text-left bg-gray-50 p-5 rounded-2xl mb-6 border border-gray-100">
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase ml-1">Nome Completo</label>
-                <input 
-                  type="text" 
-                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-sm mt-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  value={userData.name}
-                  onChange={e => setUserData({...userData, name: e.target.value})}
-                  placeholder="Seu nome"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase ml-1">CPF</label>
-                <input 
-                  type="text" 
-                  className="w-full bg-white border border-gray-200 rounded-lg p-3 text-sm mt-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  value={userData.cpf}
-                  onChange={e => setUserData({...userData, cpf: e.target.value})}
-                  placeholder="000.000.000-00"
-                  maxLength={14}
-                />
-              </div>
-            </div>
-
-            <button
-              onClick={handlePayment}
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold py-4 rounded-xl transition-all transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed shadow-lg hover:shadow-blue-200 flex justify-center items-center gap-2"
-            >
-              {loading ? "Processando..." : (
-                <><span>Assinar Agora</span><span>→</span></>
-              )}
-            </button>
-            
-            <p className="text-center text-xs text-gray-400 mt-4">
-              Aceitamos Pix, Boleto e Cartão
-            </p>
-            
-          </div>
-        </div>
+        </button>
+        <p className="text-center text-xs text-gray-400 mt-4">
+          Ambiente seguro. Aceitamos Pix, Cartão e Boleto.
+        </p>
       </div>
     </div>
   );
