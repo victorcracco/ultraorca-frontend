@@ -5,7 +5,7 @@ import { Helmet } from "react-helmet-async";
 export default function LandingPage() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Lista de profissões (SEM "Técnicos")
+  // Lista de profissões
   const professions = [
     "Eletricistas", 
     "Freelancers", 
@@ -24,18 +24,15 @@ export default function LandingPage() {
         />
       </Helmet>
 
-      {/* --- HERO SECTION DARK --- */}
+      {/* --- HERO SECTION --- */}
       <header className="relative bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 text-white overflow-hidden pb-12">
-        {/* Padrão de fundo sutil */}
         <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
         
-        {/* NAVBAR */}
         <nav className="relative z-50 max-w-7xl mx-auto px-6 h-24 flex justify-between items-center">
           <div className="flex items-center gap-2 text-2xl font-extrabold tracking-tighter cursor-pointer">
             <span className="text-blue-400">🚀</span> UltraOrça
           </div>
           
-          {/* Desktop Menu */}
           <div className="hidden md:flex items-center gap-8 font-medium text-blue-100">
             <a href="#como-funciona" className="hover:text-white transition">Como funciona</a>
             <a href="#precos" className="hover:text-white transition">Planos</a>
@@ -51,7 +48,6 @@ export default function LandingPage() {
             </Link>
           </div>
 
-           {/* Mobile Menu Button */}
            <button className="md:hidden text-white" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
@@ -59,7 +55,6 @@ export default function LandingPage() {
           </button>
         </nav>
 
-        {/* Mobile Menu Drawer */}
         {isMobileMenuOpen && (
           <div className="md:hidden absolute top-24 left-0 w-full bg-blue-900/95 backdrop-blur-sm z-40 p-6 border-t border-blue-800 animate-fade-in-down">
              <div className="flex flex-col gap-6 text-center font-medium text-lg">
@@ -71,7 +66,6 @@ export default function LandingPage() {
           </div>
         )}
 
-        {/* HERO CONTENT */}
         <div className="relative z-10 max-w-4xl mx-auto px-6 text-center pt-12 pb-16">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 text-blue-200 text-sm font-medium mb-8 border border-white/20 animate-fade-in-up">
             <span className="animate-pulse">✨</span> A ferramenta nº 1 para prestadores de serviço
@@ -86,7 +80,6 @@ export default function LandingPage() {
             Chega de enviar preços pelo WhatsApp sem formatação. Crie PDFs incríveis com sua marca em segundos e passe confiança para o cliente.
           </p>
 
-          {/* LISTA DE PROFISSÕES (Restaurada, sem 'Técnicos') */}
           <div className="flex flex-wrap justify-center gap-3 mb-12 animate-fade-in-up delay-300 max-w-3xl mx-auto">
             {professions.map((item, index) => (
               <span key={index} className="px-4 py-2 rounded-full bg-white/10 text-blue-200 text-sm font-semibold border border-white/10 backdrop-blur-sm hover:bg-white/20 transition cursor-default">
@@ -114,7 +107,6 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Onda de transição (Altura Reduzida) */}
         <div className="absolute bottom-0 left-0 w-full overflow-hidden leading-[0] rotate-180">
             <svg className="relative block w-full h-[30px] md:h-[60px]" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 120" preserveAspectRatio="none">
                 <path d="M321.39,56.44c58-10.79,114.16-30.13,172-41.86,82.39-16.72,168.19-17.73,250.45-.39C823.78,31,906.67,72,985.66,92.83c70.05,18.48,146.53,26.09,214.34,3V0H0V27.35A600.21,600.21,0,0,0,321.39,56.44Z" fill="#ffffff"></path>
@@ -161,23 +153,28 @@ export default function LandingPage() {
             <p className="text-gray-600 text-lg">Evolua seu plano conforme sua demanda aumenta.</p>
           </div>
           
-          {/* Grid de Preços */}
           <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto items-end">
             
-            {/* PLANO BÁSICO */}
+            {/* PLANO INICIANTE */}
             <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm hover:shadow-md transition h-fit">
               <h3 className="text-xl font-bold text-gray-900">Iniciante</h3>
               <div className="my-6">
                 <span className="text-4xl font-extrabold text-gray-900">R$ 19,99</span>
                 <span className="text-gray-500">/mês</span>
               </div>
-              <p className="text-gray-500 text-sm mb-6 pb-6 border-b border-gray-100">Para quem faz poucos orçamentos por semana.</p>
+              <p className="text-gray-500 text-sm mb-6 pb-6 border-b border-gray-100">Para quem está começando.</p>
+              
               <ul className="space-y-4 text-sm text-gray-700 mb-8">
                 <li className="flex gap-3"><span className="text-blue-500">✓</span> <strong>30 orçamentos</strong>/mês</li>
-                <li className="flex gap-3"><span className="text-blue-500">✓</span> Cadastro de Clientes</li>
+                {/* Produto ativado */}
+                <li className="flex gap-3"><span className="text-blue-500">✓</span> Cadastro de Produtos/Serviços</li>
                 <li className="flex gap-3"><span className="text-blue-500">✓</span> PDF Profissional</li>
-                <li className="flex gap-3 text-gray-400"><span className="text-gray-300">✕</span> Sem cadastro de produtos</li>
+                
+                {/* Limitações de Design */}
+                <li className="flex gap-3 text-gray-400"><span className="text-gray-300">✕</span> Sem personalização de cor</li>
+                <li className="flex gap-3 text-gray-400"><span className="text-gray-300">✕</span> Layout Fixo (Azul Padrão)</li>
               </ul>
+
                <Link to="/register" className="block w-full py-3 px-6 bg-white border-2 border-gray-200 hover:border-gray-400 text-gray-700 font-bold rounded-xl text-center transition">
                 Começar
               </Link>
@@ -193,10 +190,12 @@ export default function LandingPage() {
                 <span className="text-5xl font-extrabold">R$ 29,99</span>
                 <span className="text-blue-200">/mês</span>
               </div>
-              <p className="text-blue-200/80 text-sm mb-6 pb-6 border-b border-white/10">A escolha certa para quem quer crescer sem travas.</p>
+              <p className="text-blue-200/80 text-sm mb-6 pb-6 border-b border-white/10">Liberdade total para sua marca.</p>
+              
               <ul className="space-y-4 text-sm text-white mb-10 font-medium">
                 <li className="flex gap-3"><span className="text-blue-400">✓</span> <strong>Orçamentos ILIMITADOS</strong></li>
                 <li className="flex gap-3"><span className="text-blue-400">✓</span> Cadastro de Produtos/Serviços</li>
+                <li className="flex gap-3"><span className="text-blue-400">✓</span> <strong>Personalize a cor do documento</strong></li>
                 <li className="flex gap-3"><span className="text-blue-400">✓</span> Remoção da marca "Feito com..."</li>
                 <li className="flex gap-3"><span className="text-blue-400">✓</span> Suporte Prioritário</li>
               </ul>
@@ -235,34 +234,30 @@ export default function LandingPage() {
       <section className="py-24 bg-white">
          <div className="max-w-4xl mx-auto px-6">
             <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl p-12 text-center text-white shadow-2xl relative overflow-hidden">
-                {/* Bolhas de fundo */}
-                <div className="absolute top-0 left-0 w-64 h-64 bg-white/10 rounded-full -translate-x-1/2 -translate-y-1/2 blur-2xl"></div>
-                <div className="absolute bottom-0 right-0 w-64 h-64 bg-blue-400/20 rounded-full translate-x-1/2 translate-y-1/2 blur-2xl"></div>
+               <div className="absolute top-0 left-0 w-64 h-64 bg-white/10 rounded-full -translate-x-1/2 -translate-y-1/2 blur-2xl"></div>
+               <div className="absolute bottom-0 right-0 w-64 h-64 bg-blue-400/20 rounded-full translate-x-1/2 translate-y-1/2 blur-2xl"></div>
 
-                <h2 className="text-3xl md:text-4xl font-bold mb-6 relative z-10">Faça seu primeiro orçamento profissional agora.</h2>
-                <p className="text-blue-100 text-lg mb-10 relative z-10 max-w-xl mx-auto">Leva menos de 2 minutos e você não precisa colocar cartão de crédito para começar.</p>
-                <Link to="/register" className="relative z-10 inline-block bg-white text-blue-900 text-xl px-12 py-5 rounded-xl font-bold hover:bg-blue-50 transition shadow-xl transform hover:-translate-y-1">
-                  Criar Conta Gratuita
-                </Link>
+               <h2 className="text-3xl md:text-4xl font-bold mb-6 relative z-10">Faça seu primeiro orçamento profissional agora.</h2>
+               <p className="text-blue-100 text-lg mb-10 relative z-10 max-w-xl mx-auto">Leva menos de 2 minutos e você não precisa colocar cartão de crédito para começar.</p>
+               <Link to="/register" className="relative z-10 inline-block bg-white text-blue-900 text-xl px-12 py-5 rounded-xl font-bold hover:bg-blue-50 transition shadow-xl transform hover:-translate-y-1">
+                 Criar Conta Gratuita
+               </Link>
             </div>
          </div>
       </section>
 
- {/* --- FOOTER --- */}
+      {/* --- FOOTER --- */}
       <footer className="bg-gray-50 py-12 border-t border-gray-100">
         <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
           
-          {/* Logo */}
           <div className="flex items-center gap-2 text-xl font-bold text-gray-900">
              <span className="text-2xl">🚀</span> UltraOrça
           </div>
 
-          {/* Links Centrais */}
           <div className="flex flex-wrap justify-center gap-6 md:gap-8 text-sm font-medium text-gray-600">
             <Link to="/terms" className="hover:text-blue-600 transition">Termos de Uso</Link>
             <Link to="/privacy" className="hover:text-blue-600 transition">Privacidade</Link>
             
-            {/* INSTAGRAM (Novo) */}
             <a 
               href="https://www.instagram.com/ultraorcabr/" 
               target="_blank" 
@@ -275,7 +270,6 @@ export default function LandingPage() {
             <a href="mailto:suporte@ultraorca.com" className="hover:text-blue-600 transition">Contato</a>
           </div>
 
-          {/* Copyright e Créditos */}
           <div className="text-gray-400 text-sm text-center md:text-right">
              <p>© 2024 UltraOrça. Feito no Brasil 🇧🇷</p>
              <p className="text-xs mt-1">
@@ -289,7 +283,6 @@ export default function LandingPage() {
   );
 }
 
-// Componente de Feature
 function FeatureCard({ number, title, desc }) {
   return (
     <div className="relative p-8 rounded-3xl border border-gray-100 bg-white hover:border-blue-200 hover:shadow-xl transition-all duration-300 group">

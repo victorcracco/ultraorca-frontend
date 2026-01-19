@@ -44,16 +44,10 @@ export async function generateBudgetPDF({
   displayId = null 
 }) {
   try {
-    // 1. DEFINIR NOME DO ARQUIVO (Limpeza rigorosa)
-    // Se não tiver cliente ainda, usa "Novo_Cliente" para não ficar vazio
     const cleanClient = (client || "Novo_Cliente").trim().replace(/[^a-zA-Z0-9À-ÿ\s]/g, "").replace(/\s+/g, "_");
-    
-    // Se não tiver ID (antes de salvar), usa data/hora para ficar único
     const idSufix = displayId ? `_${displayId}` : `_${new Date().getHours()}${new Date().getMinutes()}`;
-    
     const fileName = `Orcamento_${cleanClient}${idSufix}.pdf`;
 
-    // 2. Preparar Dados Empresa
     let company = companyData || {};
     if (!company.company_name && !company.nomeEmpresa) {
         const saved = localStorage.getItem("orcasimples_dados");
@@ -68,18 +62,15 @@ export async function generateBudgetPDF({
     const enderecoEmpresa = company.address || company.endereco || "";
     let logoImg = company.logo_url || company.logo; 
 
-    // 3. Converter imagem (Mobile Fix)
     if (logoImg && logoImg.startsWith("http")) {
        const base64Logo = await imageUrlToBase64(logoImg);
        if (base64Logo) logoImg = base64Logo;
     }
 
-    // 4. GERAÇÃO DO PDF
     const doc = new jsPDF();
     
-    // METADADOS INTERNOS (Para o iOS ler corretamente)
     doc.setProperties({
-        title: fileName, // Truque: O título interno deve ser igual ao nome do arquivo
+        title: fileName, 
         subject: `Orçamento para ${client}`,
         author: nomeEmpresa,
         creator: 'UltraOrça'
@@ -91,7 +82,6 @@ export async function generateBudgetPDF({
     const PRIMARY_COLOR = hexToRgb(primaryColor);
     const TEXT_COLOR = [40, 40, 40];
 
-    // --- LAYOUT DO PDF ---
     doc.setFillColor(...PRIMARY_COLOR);
     doc.rect(0, 0, pageWidth, 6, "F");
 
@@ -182,37 +172,36 @@ export async function generateBudgetPDF({
         doc.rect(0, 0, pageWidth, 6, "F");
     }
 
+    // --- CÁLCULO DINÂMICO PARA EVITAR SOBREPOSIÇÃO ---
     doc.setFontSize(14);
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(...PRIMARY_COLOR);
-    doc.text("TOTAL GERAL", pageWidth - marginX - 60, finalY + 5);
+    
+    // Formata o valor e calcula a largura que ele ocupa
+    const valorFormatado = formatCurrency(total);
+    const larguraDoValor = doc.getTextWidth(valorFormatado);
+    
+    // Imprime o valor à direita
     doc.setTextColor(0, 0, 0);
-    doc.text(formatCurrency(total), pageWidth - marginX, finalY + 5, { align: "right" });
+    doc.text(valorFormatado, pageWidth - marginX, finalY + 5, { align: "right" });
+
+    // Imprime o título empurrado para a esquerda baseado no tamanho do valor
+    doc.setTextColor(...PRIMARY_COLOR);
+    // pageWidth - marginX (onde termina o valor) - larguraDoValor (tamanho do numero) - 5 (espaço)
+    doc.text("TOTAL GERAL", pageWidth - marginX - larguraDoValor - 5, finalY + 5, { align: "right" });
+
 
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
     doc.setFont("helvetica", "normal");
     doc.text("Gerado via UltraOrça", pageWidth / 2, pageHeight - 10, { align: "center" });
 
-    /* ========================================================
-       CORREÇÃO FINAL: SALVAR / COMPARTILHAR
-       ======================================================== */
-    
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
     if (isMobile && navigator.share && navigator.canShare) {
         try {
             const blob = doc.output('blob');
-            // TRUQUE 1: Criar File Object com o nome EXATO
             const file = new File([blob], fileName, { type: "application/pdf" });
-            
-            const shareData = {
-                files: [file],
-                // TRUQUE 2: O título no shareData DEVE ser idêntico ao nome do arquivo
-                // para o iOS não substituir por "PREVIA"
-                title: fileName, 
-                // TRUQUE 3: Não envie 'text' se possível, alguns Androids preferem só o arquivo
-            };
+            const shareData = { files: [file], title: fileName };
 
             if (navigator.canShare(shareData)) {
                 await navigator.share(shareData);
@@ -223,7 +212,6 @@ export async function generateBudgetPDF({
         }
     }
 
-    // Se for PC ou share falhar
     doc.save(fileName);
 
   } catch (error) {
