@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate, Link } from "react-router-dom";
+import { supabase } from "../services/supabase"; 
 import ProductSelector from "../components/ProductSelector";
 import { getProducts } from "../services/storage";
 import { generateBudgetPDF } from "../utils/generateBudgetPDF"; 
@@ -30,8 +31,10 @@ export default function NewBudget() {
   const [modalMessage, setModalMessage] = useState({ title: "", text: "" });
   const [saveFeedback, setSaveFeedback] = useState("");
   const [loading, setLoading] = useState(false);
+  
+  // ESTADO DO PLANO (Novo)
+  const [userPlan, setUserPlan] = useState("free"); 
 
-  // Opções de Cores
   const colorOptions = [
     { name: "Azul", value: "#2563eb", bgClass: "bg-blue-600" },
     { name: "Verde", value: "#16a34a", bgClass: "bg-green-600" },
@@ -39,11 +42,11 @@ export default function NewBudget() {
     { name: "Cinza", value: "#4b5563", bgClass: "bg-gray-600" },
   ];
 
-  // --- 1. CARREGAMENTO INICIAL ---
+  // --- CARREGAMENTO ---
   useEffect(() => {
     setProducts(getProducts());
 
-    // Carrega dados da empresa
+    // 1. Carrega dados da empresa (Local)
     const savedData = localStorage.getItem("orcasimples_dados");
     if (savedData) {
       try {
@@ -51,11 +54,24 @@ export default function NewBudget() {
         setCompanyData(parsed);
         if (parsed.corPadrao) setPrimaryColor(parsed.corPadrao);
         if (parsed.validadePadrao) setValidityDays(parsed.validadePadrao);
-      } catch (e) {
-        console.error("Erro ao ler dados da empresa", e);
-      }
+      } catch (e) {}
     }
 
+    // 2. Verifica qual é o plano do usuário (Supabase)
+    async function fetchPlan() {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            const { data } = await supabase
+                .from('profiles')
+                .select('plan_type')
+                .eq('id', user.id)
+                .single();
+            if (data) setUserPlan(data.plan_type || 'free');
+        }
+    }
+    fetchPlan();
+
+    // 3. Carrega Orçamento (se for edição)
     async function loadBudget() {
       if (editId) {
         setLoading(true);
@@ -72,6 +88,7 @@ export default function NewBudget() {
         setLoading(false);
       } 
       else {
+        // Rascunho
         const draft = localStorage.getItem("budget_draft");
         if (draft) {
           try {
@@ -89,7 +106,7 @@ export default function NewBudget() {
     loadBudget();
   }, [editId]);
 
-  // --- 2. AUTO-SAVE ---
+  // --- AUTO-SAVE (Rascunho) ---
   useEffect(() => {
     if (!editId && !budgetId) {
       const draftData = { client, clientAddress, items, primaryColor };
@@ -103,137 +120,107 @@ export default function NewBudget() {
   function addEmptyItem() {
     setItems([...items, { id: crypto.randomUUID(), description: "", quantity: 1, price: "" }]);
   }
-
   function updateItem(id, field, value) {
     setItems(items.map((item) => (item.id === id ? { ...item, [field]: value } : item)));
   }
-
   function removeItem(id) {
     setItems(items.filter((item) => item.id !== id));
   }
-
   const handleProductSelect = (product) => {
     setItems([...items, { id: crypto.randomUUID(), description: product.name, quantity: 1, price: product.price }]);
   };
-
   const total = items.reduce((sum, item) => {
-    const qty = Number(item.quantity) || 0;
-    const price = Number(item.price) || 0;
-    return sum + (qty * price);
+    return sum + ((Number(item.quantity) || 0) * (Number(item.price) || 0));
   }, 0);
 
   // --- VALIDAÇÃO ---
   const validateForm = () => {
-    if (!client.trim()) {
-        alert("Por favor, preencha o nome do cliente.");
-        return false;
-    }
-    if (items.length === 0) {
-        alert("Adicione pelo menos um item ao orçamento.");
-        return false;
-    }
-    const hasEmpty = items.some(item => !item.description || item.description.trim() === "");
-    if (hasEmpty) {
-        alert("Existem itens sem descrição! Preencha ou remova os itens vazios.");
-        return false;
-    }
+    if (!client.trim()) { alert("Preencha o nome do cliente."); return false; }
+    if (items.length === 0) { alert("Adicione pelo menos um item."); return false; }
+    if (items.some(i => !i.description)) { alert("Preencha a descrição dos itens."); return false; }
     return true;
   };
 
-  // --- WHATSAPP (CORRIGIDO) ---
+  // --- REGRA DE NEGÓCIO: BLOQUEIO DE LAYOUT ---
+  const isLayoutLocked = (targetLayout) => {
+      // Regra: Starter só pode Moderno. Free e Pro liberados.
+      if (userPlan === 'starter' && targetLayout !== 'modern') {
+          return true; // Bloqueado
+      }
+      return false; // Liberado
+  };
+
+  const handleSetLayout = (newLayout) => {
+      if (isLayoutLocked(newLayout)) {
+          alert("🔒 Plano Iniciante: Apenas o layout Moderno está disponível.\nFaça upgrade para o Profissional para liberar todos.");
+          return;
+      }
+      setLayout(newLayout);
+  };
+
+  // --- WHATSAPP ---
   const handleShareWhatsApp = () => {
     if (!validateForm()) return;
 
-    // 1. Tenta pegar o nome de várias fontes para garantir que não fique "Sua Empresa"
     let empresaNome = companyData?.company_name || companyData?.nomeEmpresa;
-
-    // 2. Se falhar, tenta ler do localStorage na hora (garantia extra)
     if (!empresaNome) {
         try {
             const savedNow = localStorage.getItem("orcasimples_dados");
-            if (savedNow) {
-                const parsedNow = JSON.parse(savedNow);
-                empresaNome = parsedNow.company_name || parsedNow.nomeEmpresa;
-            }
+            if (savedNow) empresaNome = JSON.parse(savedNow).company_name;
         } catch(e) {}
     }
-
-    // 3. Fallback final
     empresaNome = empresaNome || "Sua Empresa";
 
-    let message = `*ORÇAMENTO - ${empresaNome}*\n`;
-    message += `-------------------------\n`;
-    message += `👤 *Cliente:* ${client}\n`;
+    let message = `*ORÇAMENTO - ${empresaNome}*\n-------------------------\n👤 *Cliente:* ${client}\n`;
     if(displayId) message += `🔖 *Nº:* #${displayId}\n`;
     message += `-------------------------\n\n`;
-    
     items.forEach(item => {
         const itemTotal = (Number(item.quantity) || 1) * (Number(item.price) || 0);
-        message += `▪️ ${item.quantity}x ${item.description}\n`;
-        message += `   R$ ${itemTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}\n`;
+        message += `▪️ ${item.quantity}x ${item.description}\n   R$ ${itemTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}\n`;
     });
-    
-    message += `\n-------------------------\n`;
-    message += `💰 *TOTAL GERAL: ${total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}*\n`;
-    message += `-------------------------\n`;
-    message += `📅 Válido por ${validityDays} dias.\n`;
-    message += `_Gerado via UltraOrça_`;
+    message += `\n-------------------------\n💰 *TOTAL: ${total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}*\n-------------------------\n📅 Validade: ${validityDays} dias.\n_Gerado via UltraOrça_`;
 
-    const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank');
+    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
   };
 
   // --- AÇÕES ---
   const handleGeneratePDF = () => {
     if (!validateForm()) return;
-
-    generateBudgetPDF({
-      client,
-      clientAddress,
-      items,
-      total,
-      layout, 
-      primaryColor,
-      companyData, // O PDF generator também tem lógica de fallback interna
-      validityDays,
-      displayId: displayId || null 
-    });
+    generateBudgetPDF({ client, clientAddress, items, total, layout, primaryColor, companyData, validityDays, displayId: displayId || null });
   };
 
   const handleSaveBudget = async () => {
     if (!validateForm()) return;
-
     setLoading(true);
     try {
+      // Verifica limite apenas se for NOVO (não tem ID)
       if (!budgetId && !editId) {
-        const check = await checkPlanLimit();
+        const check = await checkPlanLimit(); // Chama a lógica do budgetService.js
+        
         if (!check.allowed) {
           setLoading(false);
-          setModalMessage({
-             title: "Limite Atingido",
-             text: check.plan === 'starter' 
-               ? "Você atingiu o limite de 30 orçamentos do plano Iniciante." 
-               : "Você atingiu o limite de 3 orçamentos gratuitos."
-          });
+          let msg = "";
+          let title = "Limite Atingido";
+          
+          if (check.plan === 'free') {
+              title = "Limite Gratuito (3/3)";
+              msg = "Você já utilizou seus 3 orçamentos gratuitos de teste.";
+          } else if (check.plan === 'starter') {
+              title = "Limite Mensal (30/30)";
+              msg = "Você atingiu o limite de 30 orçamentos do plano Iniciante este mês.";
+          }
+          
+          setModalMessage({ title, text: msg });
           setShowUpgradeModal(true);
           return;
         }
       }
 
-      const budgetData = {
-        id: budgetId || editId,
-        client,
-        clientAddress,
-        items,
-        total,
-        primaryColor,
-        validityDays
-      };
-
+      const budgetData = { id: budgetId || editId, client, clientAddress, items, total, primaryColor, validityDays };
       const newId = await saveBudget(budgetData);
       setBudgetId(newId);
       localStorage.removeItem("budget_draft");
-
+      
       setSaveFeedback("Salvo com sucesso!");
       setTimeout(() => setSaveFeedback(""), 3000);
 
@@ -241,27 +228,18 @@ export default function NewBudget() {
          const updated = await getBudgetById(newId);
          if (updated) setDisplayId(updated.display_id);
       }
-
     } catch (error) {
-      console.error("Erro ao salvar:", error);
-      alert("Erro ao salvar orçamento.");
+      console.error(error);
+      alert("Erro ao salvar.");
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading && editId && !client) {
-    return (
-        <div className="flex flex-col items-center justify-center h-screen text-gray-500">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-            <p>Carregando...</p>
-        </div>
-    );
-  }
+  if (loading && editId && !client) return <div className="flex flex-col items-center justify-center h-screen text-gray-500"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div><p>Carregando...</p></div>;
 
   return (
-    <div className="max-w-7xl mx-auto p-6 relative pb-24"> 
-      
+    <div className="max-w-7xl mx-auto p-6 relative pb-24">
       {/* MODAL UPGRADE */}
       {showUpgradeModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
@@ -279,17 +257,14 @@ export default function NewBudget() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
          <div className="flex items-center gap-4">
             <button onClick={() => navigate("/app")} className="text-gray-500 hover:text-gray-700 transition">&larr; Voltar</button>
-            <div>
-                <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3">
-                    {editId || budgetId ? "Editar Orçamento" : "Novo Orçamento"}
-                    {displayId ? (
-                        <span className="bg-blue-100 text-blue-700 text-lg px-3 py-1 rounded-full font-mono">#{displayId}</span>
-                    ) : (
-                        <span className="bg-gray-100 text-gray-500 text-xs px-2 py-1 rounded uppercase tracking-wide">Rascunho</span>
-                    )}
-                </h1>
-            </div>
+            <h1 className="text-3xl font-bold text-gray-800">
+                {editId || budgetId ? "Editar Orçamento" : "Novo Orçamento"}
+            </h1>
          </div>
+         {/* Badge do Plano */}
+         <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${userPlan === 'pro' ? 'bg-purple-100 text-purple-700' : userPlan === 'starter' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+            Plano {userPlan === 'starter' ? 'Iniciante' : userPlan === 'pro' ? 'Pro' : 'Grátis'}
+         </span>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -302,7 +277,7 @@ export default function NewBudget() {
             <h2 className="text-lg font-bold text-gray-700 mb-4 border-b pb-2">1. Cliente</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nome <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
                 <input 
                     className={`w-full p-2.5 border rounded-lg outline-none focus:border-blue-500 transition ${!client ? 'border-gray-300' : 'border-blue-500 bg-blue-50'}`} 
                     placeholder="Ex: João da Silva" 
@@ -379,36 +354,43 @@ export default function NewBudget() {
         {/* DIREITA: PAINEL DE AÇÕES */}
         <div className="lg:col-span-1">
           <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 sticky top-6">
-            <h2 className="text-lg font-bold text-gray-800 mb-6">Resumo</h2>
+            <h2 className="text-lg font-bold text-gray-800 mb-6">Total: {total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</h2>
             
             {saveFeedback && <div className="bg-green-100 text-green-700 text-sm p-3 rounded mb-4 text-center font-bold animate-fade-in-down">{saveFeedback}</div>}
 
-            <div className="bg-gray-50 rounded-lg p-4 mb-6 border border-gray-100">
-              <span className="block text-gray-500 text-sm mb-1">Total Estimado</span>
-              <span className="block text-3xl font-bold text-gray-900">{total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
-            </div>
-
-            {/* SELETOR DE MODELOS */}
+            {/* SELETOR DE MODELOS COM LÓGICA DE BLOQUEIO */}
             <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Modelo do PDF</label>
                 <div className="grid grid-cols-2 gap-3">
-                    <button onClick={() => setLayout("modern")} className={`p-3 rounded-lg border-2 text-left transition-all ${layout === "modern" ? "border-blue-600 bg-blue-50 ring-1 ring-blue-600" : "border-gray-200 hover:border-blue-300"}`}>
+                    
+                    {/* MODERNO (Sempre Livre) */}
+                    <button onClick={() => handleSetLayout("modern")} className={`p-3 rounded-lg border-2 text-left transition-all ${layout === "modern" ? "border-blue-600 bg-blue-50 ring-1 ring-blue-600" : "border-gray-200 hover:border-blue-300"}`}>
                         <div className="h-2 w-full bg-blue-500 rounded-full mb-2"></div>
                         <span className="text-xs font-bold text-gray-700">Moderno</span>
                     </button>
-                    <button onClick={() => setLayout("executive")} className={`p-3 rounded-lg border-2 text-left transition-all ${layout === "executive" ? "border-blue-600 bg-blue-50 ring-1 ring-blue-600" : "border-gray-200 hover:border-blue-300"}`}>
+
+                    {/* EXECUTIVO (Bloqueado para Starter) */}
+                    <button onClick={() => handleSetLayout("executive")} className={`relative p-3 rounded-lg border-2 text-left transition-all ${layout === "executive" ? "border-blue-600 bg-blue-50" : "border-gray-200"} ${isLayoutLocked("executive") ? "opacity-50 cursor-not-allowed bg-gray-50" : "hover:border-blue-300"}`}>
+                        {isLayoutLocked("executive") && <div className="absolute top-1 right-1 text-lg">🔒</div>}
                         <div className="h-4 w-full bg-gray-800 rounded mb-2"></div>
                         <span className="text-xs font-bold text-gray-700">Executivo</span>
                     </button>
-                    <button onClick={() => setLayout("minimal")} className={`p-3 rounded-lg border-2 text-left transition-all ${layout === "minimal" ? "border-blue-600 bg-blue-50 ring-1 ring-blue-600" : "border-gray-200 hover:border-blue-300"}`}>
+
+                    {/* MINIMAL (Bloqueado para Starter) */}
+                    <button onClick={() => handleSetLayout("minimal")} className={`relative p-3 rounded-lg border-2 text-left transition-all ${layout === "minimal" ? "border-blue-600 bg-blue-50" : "border-gray-200"} ${isLayoutLocked("minimal") ? "opacity-50 cursor-not-allowed bg-gray-50" : "hover:border-blue-300"}`}>
+                        {isLayoutLocked("minimal") && <div className="absolute top-1 right-1 text-lg">🔒</div>}
                         <div className="h-2 w-1/2 bg-gray-300 rounded-full mb-2"></div>
                         <span className="text-xs font-bold text-gray-700">Clean</span>
                     </button>
-                    <button onClick={() => setLayout("classic")} className={`p-3 rounded-lg border-2 text-left transition-all ${layout === "classic" ? "border-blue-600 bg-blue-50 ring-1 ring-blue-600" : "border-gray-200 hover:border-blue-300"}`}>
+
+                    {/* CLASSIC (Bloqueado para Starter) */}
+                    <button onClick={() => handleSetLayout("classic")} className={`relative p-3 rounded-lg border-2 text-left transition-all ${layout === "classic" ? "border-blue-600 bg-blue-50" : "border-gray-200"} ${isLayoutLocked("classic") ? "opacity-50 cursor-not-allowed bg-gray-50" : "hover:border-blue-300"}`}>
+                        {isLayoutLocked("classic") && <div className="absolute top-1 right-1 text-lg">🔒</div>}
                         <div className="border border-gray-400 h-4 w-full mb-2 px-1"></div>
                         <span className="text-xs font-bold text-gray-700">Clássico</span>
                     </button>
                 </div>
+                {userPlan === 'starter' && <p className="text-xs text-orange-500 mt-2 font-bold">✨ Plano Iniciante: Acesso apenas ao layout Moderno.</p>}
             </div>
 
             {/* CONFIGURAÇÕES VISUAIS */}
