@@ -119,7 +119,7 @@ export default function NewBudget() {
     return sum + (qty * price);
   }, 0);
 
-  // --- VALIDAÇÃO (NOVA) ---
+  // --- VALIDAÇÃO ---
   const validateForm = () => {
     if (!client.trim()) {
         alert("Por favor, preencha o nome do cliente.");
@@ -129,13 +129,38 @@ export default function NewBudget() {
         alert("Adicione pelo menos um item ao orçamento.");
         return false;
     }
-    // Verifica se tem item sem descrição
     const hasEmpty = items.some(item => !item.description || item.description.trim() === "");
     if (hasEmpty) {
         alert("Existem itens sem descrição! Preencha ou remova os itens vazios.");
         return false;
     }
     return true;
+  };
+
+  // --- WHATSAPP (NOVO) ---
+  const handleShareWhatsApp = () => {
+    if (!validateForm()) return;
+
+    let message = `*ORÇAMENTO - ${companyData?.company_name || "Sua Empresa"}*\n`;
+    message += `-------------------------\n`;
+    message += `👤 *Cliente:* ${client}\n`;
+    if(displayId) message += `🔖 *Nº:* #${displayId}\n`;
+    message += `-------------------------\n\n`;
+    
+    items.forEach(item => {
+        const itemTotal = (Number(item.quantity) || 1) * (Number(item.price) || 0);
+        message += `▪️ ${item.quantity}x ${item.description}\n`;
+        message += `   R$ ${itemTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}\n`;
+    });
+    
+    message += `\n-------------------------\n`;
+    message += `💰 *TOTAL GERAL: ${total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}*\n`;
+    message += `-------------------------\n`;
+    message += `📅 Válido por ${validityDays} dias.\n`;
+    message += `_Gerado via UltraOrça_`;
+
+    const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
   };
 
   // --- AÇÕES ---
@@ -215,7 +240,7 @@ export default function NewBudget() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6 relative">
+    <div className="max-w-7xl mx-auto p-6 relative pb-24"> {/* pb-24 para não esconder atrás do menu mobile */}
       
       {/* MODAL UPGRADE */}
       {showUpgradeModal && (
@@ -299,7 +324,6 @@ export default function NewBudget() {
                 <div key={item.id} className={`flex flex-col md:flex-row gap-3 items-end md:items-center bg-white p-3 rounded-lg border hover:border-blue-300 transition-colors ${(!item.description) ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}>
                   <span className="hidden md:block text-gray-400 text-xs w-6 text-center">{index + 1}.</span>
                   
-                  {/* Descrição */}
                   <div className="flex-grow w-full">
                     <label className="md:hidden text-xs text-gray-500 font-bold mb-1">Descrição</label>
                     <input 
@@ -310,19 +334,16 @@ export default function NewBudget() {
                     />
                   </div>
                   
-                  {/* Quantidade */}
                   <div className="w-full md:w-24">
                     <label className="md:hidden text-xs text-gray-500 font-bold mb-1">Qtd</label>
                     <input type="number" className="w-full p-2 border border-gray-300 rounded text-sm text-center outline-none focus:border-blue-500" value={item.quantity} onChange={(e) => updateItem(item.id, "quantity", e.target.value)} />
                   </div>
                   
-                  {/* Valor */}
                   <div className="w-full md:w-32">
                     <label className="md:hidden text-xs text-gray-500 font-bold mb-1">Valor Unit.</label>
                     <input type="number" placeholder="0,00" className="w-full p-2 border border-gray-300 rounded text-sm text-right outline-none focus:border-blue-500" value={item.price} onChange={(e) => updateItem(item.id, "price", e.target.value)} />
                   </div>
                   
-                  {/* Botão Remover */}
                   <div className="flex justify-end md:w-auto">
                     <button onClick={() => removeItem(item.id)} className="text-gray-400 hover:text-red-500 p-2 rounded hover:bg-red-50 transition">
                         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -347,7 +368,7 @@ export default function NewBudget() {
               <span className="block text-3xl font-bold text-gray-900">{total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
             </div>
 
-            {/* SELETOR DE MODELOS DE PDF */}
+            {/* SELETOR DE MODELOS */}
             <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Modelo do PDF</label>
                 <div className="grid grid-cols-2 gap-3">
@@ -394,12 +415,21 @@ export default function NewBudget() {
             {/* BOTÕES DE AÇÃO */}
             <div className="space-y-3">
               <button 
-                className={`w-full py-4 px-6 rounded-xl font-bold text-white shadow-lg flex justify-center items-center gap-2 transition-transform active:scale-95 ${(!client || items.length === 0) ? "bg-gray-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-700 hover:shadow-green-200"}`}
+                className={`w-full py-4 px-6 rounded-xl font-bold text-white shadow-lg flex justify-center items-center gap-2 transition-transform active:scale-95 ${(!client || items.length === 0) ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 hover:shadow-blue-200"}`}
                 disabled={!client || items.length === 0}
                 onClick={handleGeneratePDF}
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                 Gerar PDF
+              </button>
+              
+              <button 
+                className={`w-full py-4 px-6 rounded-xl font-bold text-white shadow-lg flex justify-center items-center gap-2 transition-transform active:scale-95 ${(!client || items.length === 0) ? "bg-gray-400 cursor-not-allowed" : "bg-green-500 hover:bg-green-600 hover:shadow-green-200"}`}
+                disabled={!client || items.length === 0}
+                onClick={handleShareWhatsApp}
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+                Enviar Texto no Zap
               </button>
 
               <button 
