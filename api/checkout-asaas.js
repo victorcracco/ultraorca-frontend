@@ -1,73 +1,50 @@
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Método não permitido" });
-  }
+  if (req.method !== "POST") return res.status(405).end();
 
-  // 1. Pega os dados que vieram do Frontend
   const { userId, name, cpf, email, planId } = req.body;
-
-  // 2. Lê as chaves que JÁ ESTÃO no seu .env da Vercel/Local
+  
+  // GARANTA QUE AS CHAVES ESTÃO SENDO LIDAS
   const apiKey = process.env.ASAAS_API_KEY; 
   const apiUrl = process.env.ASAAS_URL || 'https://www.asaas.com/api/v3';
 
-  if (!apiKey) {
-    console.error("ERRO: Chave do Asaas não encontrada no .env");
-    return res.status(500).json({ error: "Configuração de servidor inválida." });
-  }
-
-  // Define os valores (Garante que o backend controla o preço)
-  const prices = {
-    starter: 19.99,
-    pro: 29.99,
-    annual: 299.00
-  };
+  const prices = { starter: 19.99, pro: 29.99, annual: 299.00 };
 
   try {
-    // --- PASSO A: Criar/Buscar Cliente no Asaas ---
-    // (Simplificando: tenta criar direto. Se o CPF já existe, o Asaas avisa ou retorna o existente dependendo da config, 
-    // mas o ideal é listar clientes antes. Para manter simples, vamos mandar criar)
+    // 1. Criar Cliente
     const clientResponse = await fetch(`${apiUrl}/customers`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "access_token": apiKey
-      },
-      body: JSON.stringify({
-        name: name,
-        cpfCnpj: cpf,
-        email: email,
-        externalReference: userId // Linkamos com o ID do Supabase
-      })
+      headers: { "Content-Type": "application/json", "access_token": apiKey },
+      body: JSON.stringify({ name, cpfCnpj: cpf, email, externalReference: userId })
     });
 
     const clientData = await clientResponse.json();
     
-    // Se der erro porque já existe, tentamos buscar pelo email (tratamento básico de erro)
+    // Tratamento de erro se cliente já existe
     let customerId = clientData.id;
-    
-    if (clientData.errors && clientData.errors[0].code === 'CUSTOMER_EMAIL_ALREADY_EXIST') {
-        // Se já existe, precisaria buscar o ID desse cliente. 
-        // Para simplificar agora, vamos assumir que o usuário vai pagar.
-        // Num cenário ideal, você faria um fetch GET /customers?email=...
-        return res.status(400).json({ error: "Email já cadastrado no Asaas. Entre em contato com suporte." });
-    } else if (clientData.errors) {
-        throw new Error(clientData.errors[0].description);
+    if (clientData.errors) {
+        if (clientData.errors[0].code === 'CUSTOMER_EMAIL_ALREADY_EXIST') {
+            // Se já existe, buscamos o ID dele (Fallback simples)
+            const searchUser = await fetch(`${apiUrl}/customers?email=${email}`, {
+                headers: { "access_token": apiKey }
+            });
+            const searchData = await searchUser.json();
+            customerId = searchData.data[0].id;
+        } else {
+            throw new Error(`Erro ao criar cliente Asaas: ${clientData.errors[0].description}`);
+        }
     }
 
-    // --- PASSO B: Criar a Assinatura ---
+    // 2. Criar Assinatura
     const subscriptionResponse = await fetch(`${apiUrl}/subscriptions`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "access_token": apiKey
-      },
+      headers: { "Content-Type": "application/json", "access_token": apiKey },
       body: JSON.stringify({
         customer: customerId,
-        billingType: "BOLETO", // Boletos do Asaas já possuem Pix embutido// Força PIX como você pediu
+        billingType: "BOLETO", // Boleto Híbrido (Tem Pix junto)
         value: prices[planId],
-        nextDueDate: new Date().toISOString().split('T')[0], // Vence hoje
+        nextDueDate: new Date().toISOString().split('T')[0],
         cycle: planId === 'annual' ? "YEARLY" : "MONTHLY",
-        description: `Assinatura UltraOrça - Plano ${planId}`,
+        description: `Assinatura UltraOrça - ${planId}`,
         externalReference: userId
       })
     });
@@ -75,17 +52,21 @@ export default async function handler(req, res) {
     const subData = await subscriptionResponse.json();
 
     if (subData.errors) {
-        throw new Error(subData.errors[0].description);
+        throw new Error(`Erro assinatura Asaas: ${subData.errors[0].description}`);
     }
 
-    // --- SUCESSO: Retorna o link para o Frontend redirecionar ---
-    return res.status(200).json({ 
-        invoiceUrl: subData.invoiceUrl, // Link da fatura/Pix
-        id: subData.id 
-    });
+    // O PULO DO GATO: Pegar invoiceUrl OU bankSlipUrl
+    const finalUrl = subData.bankSlipUrl || subData.invoiceUrl;
+
+    if (!finalUrl) {
+        console.error("Retorno Asaas:", subData); // Para você ver no Log da Vercel
+        throw new Error("O Asaas não retornou o link do boleto.");
+    }
+
+    return res.status(200).json({ invoiceUrl: finalUrl });
 
   } catch (error) {
-    console.error("Erro Asaas:", error);
-    return res.status(500).json({ error: error.message || "Erro ao processar no Asaas" });
+    console.error("Erro API Asaas:", error);
+    return res.status(500).json({ error: error.message });
   }
 }
