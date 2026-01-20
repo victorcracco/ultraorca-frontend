@@ -6,14 +6,13 @@ export default async function handler(req, res) {
   const apiKey = process.env.ASAAS_API_KEY; 
   const apiUrl = process.env.ASAAS_URL || 'https://www.asaas.com/api/v3';
 
-  // Verifica chaves
-  if (!apiKey) return res.status(500).json({ error: "Chave ASAAS_API_KEY não configurada." });
-
+  // Configuração de Preços
   const prices = { starter: 19.99, pro: 29.99, annual: 299.00 };
 
   try {
-    // 1. Criar/Buscar Cliente
-    // Nota: O Asaas exige que o CPF seja válido (mesmo em Sandbox as vezes)
+    // ---------------------------------------------------------
+    // 1. CRIAR OU RECUPERAR CLIENTE
+    // ---------------------------------------------------------
     const clientResponse = await fetch(`${apiUrl}/customers`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "access_token": apiKey },
@@ -22,39 +21,36 @@ export default async function handler(req, res) {
 
     const clientData = await clientResponse.json();
     
-    // Tratamento de erro detalhado na criação do cliente
+    let customerId = clientData.id;
+
+    // Tratamento se email já existe
     if (clientData.errors) {
-        // Se o erro for "Email já existe", tentamos buscar o ID desse email
         if (clientData.errors[0].code === 'CUSTOMER_EMAIL_ALREADY_EXIST') {
             const search = await fetch(`${apiUrl}/customers?email=${email}`, {
                 headers: { "access_token": apiKey }
             });
             const searchRes = await search.json();
             if (searchRes.data && searchRes.data.length > 0) {
-                // Recuperamos o ID do cliente existente
-                clientData.id = searchRes.data[0].id; 
+                customerId = searchRes.data[0].id; 
             } else {
-                throw new Error("Email duplicado no Asaas, mas não foi possível recuperar o ID.");
+                throw new Error("Email duplicado no Asaas e não recuperável.");
             }
         } else {
-            // Outro erro (ex: CPF inválido)
-            console.error("Erro Asaas Cliente:", clientData.errors);
-            throw new Error(`Asaas: ${clientData.errors[0].description}`);
+            throw new Error(`Erro Cliente Asaas: ${clientData.errors[0].description}`);
         }
     }
 
-    const customerId = clientData.id;
-
-    // 2. Criar Cobrança (Assinatura)
-    // Importante: Usamos BOLETO pois ele gera o QR Code Pix junto
+    // ---------------------------------------------------------
+    // 2. CRIAR ASSINATURA (CONTRATO)
+    // ---------------------------------------------------------
     const subscriptionResponse = await fetch(`${apiUrl}/subscriptions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "access_token": apiKey },
       body: JSON.stringify({
         customer: customerId,
-        billingType: "BOLETO", 
+        billingType: "BOLETO", // Gera boleto com Pix embutido
         value: prices[planId],
-        nextDueDate: new Date().toISOString().split('T')[0],
+        nextDueDate: new Date().toISOString().split('T')[0], // Vence hoje
         cycle: planId === 'annual' ? "YEARLY" : "MONTHLY",
         description: `Plano ${planId} - UltraOrça`,
         externalReference: userId
@@ -64,22 +60,34 @@ export default async function handler(req, res) {
     const subData = await subscriptionResponse.json();
 
     if (subData.errors) {
-        console.error("Erro Asaas Assinatura:", subData.errors);
-        throw new Error(`Asaas: ${subData.errors[0].description}`);
+        throw new Error(`Erro Assinatura Asaas: ${subData.errors[0].description}`);
     }
 
-    // Tenta pegar qualquer URL de pagamento disponível
-    const finalUrl = subData.bankSlipUrl || subData.invoiceUrl || subData.ticketUrl;
+    const subscriptionId = subData.id;
 
-    if (!finalUrl) {
-        console.log("Resposta completa Asaas (Debug):", JSON.stringify(subData));
-        throw new Error("Assinatura criada, mas URL de pagamento não retornada pelo Asaas.");
+    // ---------------------------------------------------------
+    // 3. O PULO DO GATO: BUSCAR A COBRANÇA GERADA
+    // ---------------------------------------------------------
+    // A assinatura em si não tem o link. Precisamos listar as cobranças dela.
+    const paymentsResponse = await fetch(`${apiUrl}/subscriptions/${subscriptionId}/payments`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json", "access_token": apiKey }
+    });
+
+    const paymentsData = await paymentsResponse.json();
+
+    if (!paymentsData.data || paymentsData.data.length === 0) {
+        throw new Error("Assinatura criada, mas nenhuma cobrança foi gerada imediatamente.");
     }
+
+    // Pega a primeira cobrança (a atual)
+    const firstPayment = paymentsData.data[0];
+    const finalUrl = firstPayment.bankSlipUrl || firstPayment.invoiceUrl;
 
     return res.status(200).json({ invoiceUrl: finalUrl });
 
   } catch (error) {
-    console.error("ERRO BACKEND ASAAS:", error.message);
+    console.error("ERRO ASAAS:", error.message);
     return res.status(500).json({ error: error.message });
   }
 }
