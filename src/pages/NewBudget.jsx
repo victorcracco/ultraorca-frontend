@@ -43,12 +43,17 @@ export default function NewBudget() {
   useEffect(() => {
     setProducts(getProducts());
 
+    // Carrega dados da empresa
     const savedData = localStorage.getItem("orcasimples_dados");
     if (savedData) {
-      const parsed = JSON.parse(savedData);
-      setCompanyData(parsed);
-      if (parsed.corPadrao) setPrimaryColor(parsed.corPadrao);
-      if (parsed.validadePadrao) setValidityDays(parsed.validadePadrao);
+      try {
+        const parsed = JSON.parse(savedData);
+        setCompanyData(parsed);
+        if (parsed.corPadrao) setPrimaryColor(parsed.corPadrao);
+        if (parsed.validadePadrao) setValidityDays(parsed.validadePadrao);
+      } catch (e) {
+        console.error("Erro ao ler dados da empresa", e);
+      }
     }
 
     async function loadBudget() {
@@ -77,9 +82,7 @@ export default function NewBudget() {
               setItems(parsedDraft.items || []);
               if (parsedDraft.primaryColor) setPrimaryColor(parsedDraft.primaryColor);
             }
-          } catch (e) {
-            console.error("Erro ao ler rascunho", e);
-          }
+          } catch (e) {}
         }
       }
     }
@@ -137,11 +140,28 @@ export default function NewBudget() {
     return true;
   };
 
-  // --- WHATSAPP (NOVO) ---
+  // --- WHATSAPP (CORRIGIDO) ---
   const handleShareWhatsApp = () => {
     if (!validateForm()) return;
 
-    let message = `*ORÇAMENTO - ${companyData?.company_name || "Sua Empresa"}*\n`;
+    // 1. Tenta pegar o nome de várias fontes para garantir que não fique "Sua Empresa"
+    let empresaNome = companyData?.company_name || companyData?.nomeEmpresa;
+
+    // 2. Se falhar, tenta ler do localStorage na hora (garantia extra)
+    if (!empresaNome) {
+        try {
+            const savedNow = localStorage.getItem("orcasimples_dados");
+            if (savedNow) {
+                const parsedNow = JSON.parse(savedNow);
+                empresaNome = parsedNow.company_name || parsedNow.nomeEmpresa;
+            }
+        } catch(e) {}
+    }
+
+    // 3. Fallback final
+    empresaNome = empresaNome || "Sua Empresa";
+
+    let message = `*ORÇAMENTO - ${empresaNome}*\n`;
     message += `-------------------------\n`;
     message += `👤 *Cliente:* ${client}\n`;
     if(displayId) message += `🔖 *Nº:* #${displayId}\n`;
@@ -174,7 +194,7 @@ export default function NewBudget() {
       total,
       layout, 
       primaryColor,
-      companyData,
+      companyData, // O PDF generator também tem lógica de fallback interna
       validityDays,
       displayId: displayId || null 
     });
@@ -240,7 +260,7 @@ export default function NewBudget() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6 relative pb-24"> {/* pb-24 para não esconder atrás do menu mobile */}
+    <div className="max-w-7xl mx-auto p-6 relative pb-24"> 
       
       {/* MODAL UPGRADE */}
       {showUpgradeModal && (
