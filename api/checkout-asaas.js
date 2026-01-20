@@ -63,7 +63,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         customer: customerId,
-        billingType: "PIX", // Força PIX como você pediu
+        billingType: "BOLETO", // Boletos do Asaas já possuem Pix embutido// Força PIX como você pediu
         value: prices[planId],
         nextDueDate: new Date().toISOString().split('T')[0], // Vence hoje
         cycle: planId === 'annual' ? "YEARLY" : "MONTHLY",
