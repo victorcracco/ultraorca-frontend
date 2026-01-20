@@ -1,96 +1,94 @@
 import { supabase } from "./supabase";
 
-// --- VERIFICAR LIMITES E PLANOS ---
-export async function checkPlanLimit() {
+// --- NOVA FUNÇÃO: PEGAR O PLANO ATUAL (Centralizada) ---
+export async function getUserPlan() {
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { allowed: false, message: "Login necessário" };
+  if (!user) return 'free';
 
-  // 1. Busca dados do perfil (Plano e Uso)
-  const { data: profile, error } = await supabase
+  // 1. Prioridade: Busca assinatura ATIVA na tabela subscriptions
+  const { data: sub } = await supabase
+    .from('subscriptions')
+    .select('plan_type, status')
+    .eq('user_id', user.id)
+    .eq('status', 'active')
+    .single();
+
+  if (sub && sub.plan_type) {
+    return sub.plan_type; // Retorna 'starter', 'pro' ou 'annual'
+  }
+
+  // 2. Fallback: Se não tiver assinatura ativa, verifica se foi setado manualmente no profile
+  // (Útil se você der um plano manual para alguém editando o banco)
+  const { data: profile } = await supabase
     .from('profiles')
-    .select('plan_type, current_period_usage, last_reset_date')
+    .select('plan_type')
     .eq('id', user.id)
     .single();
 
-  if (error) {
-    // Se der erro (ex: perfil não criado), assume Free
-    console.error("Erro perfil:", error);
-    return { allowed: true, plan: 'free' }; // Deixa passar para verificar contagem total depois
-  }
+  return profile?.plan_type || 'free';
+}
 
-  const plan = profile.plan_type || 'free';
-  const usage = profile.current_period_usage || 0;
-  const lastReset = profile.last_reset_date ? new Date(profile.last_reset_date) : new Date();
-  const now = new Date();
+// --- VERIFICAÇÃO DE LIMITES ---
+export async function checkPlanLimit() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { allowed: false, reason: "login_required" };
 
-  // 2. REGRA: PLANO PRO / ANUAL (ILIMITADO)
+  // Usa a mesma função para garantir consistência
+  const plan = await getUserPlan();
+
+  // 1. PRO ou ANUAL -> Liberado
   if (plan === 'pro' || plan === 'annual') {
     return { allowed: true, plan };
   }
 
-  // 3. REGRA: PLANO INICIANTE (30 por mês)
+  // 2. INICIANTE (Starter) -> Limite 30/mês
   if (plan === 'starter') {
-    // Calcula dias passados desde o último reset
-    const diffTime = Math.abs(now - lastReset);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+    // Conta orçamentos deste mês
+    const { data: countThisMonth, error } = await supabase.rpc('count_budgets_this_month', { 
+      user_uuid: user.id 
+    });
 
-    // Se passou mais de 30 dias, Reseta o contador!
-    if (diffDays > 30) {
-      await supabase.from('profiles').update({ 
-        current_period_usage: 0,
-        last_reset_date: new Date().toISOString()
-      }).eq('id', user.id);
+    if (error) {
+      // Se a função RPC não existir, faz contagem simples manual (fallback de segurança)
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0,0,0,0);
       
-      return { allowed: true, plan: 'starter' }; // Resetou, então tá liberado
+      const { count } = await supabase
+        .from('budgets')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .gte('created_at', startOfMonth.toISOString());
+        
+      if (count >= 30) return { allowed: false, plan: 'starter', type: 'limit_reached' };
+      return { allowed: true, plan: 'starter' };
     }
 
-    // Se ainda está no mês, verifica limite
-    if (usage >= 30) {
+    if (countThisMonth >= 30) {
       return { allowed: false, plan: 'starter', type: 'limit_reached' };
     }
-    
     return { allowed: true, plan: 'starter' };
   }
 
-  // 4. REGRA: PLANO FREE (3 no total da vida)
-  if (plan === 'free') {
-    // Conta quantos orçamentos existem na tabela (mais seguro para free vitalício)
-    const { count } = await supabase
-      .from('budgets')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id);
+  // 3. FREE -> Limite 3 Total
+  const { count } = await supabase
+    .from('budgets')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id);
 
-    if (count >= 3) {
-      return { allowed: false, plan: 'free', type: 'limit_reached' };
-    }
-    return { allowed: true, plan: 'free' };
+  if (count >= 3) {
+    return { allowed: false, plan: 'free', type: 'limit_reached' };
   }
 
   return { allowed: true, plan: 'free' };
 }
 
-// --- INCREMENTAR USO (Auxiliar) ---
-export async function incrementUsage() {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
-
-  // Busca uso atual
-  const { data: profile } = await supabase.from('profiles').select('current_period_usage').eq('id', user.id).single();
-  
-  if (profile) {
-    // Incrementa +1
-    await supabase.from('profiles').update({ 
-      current_period_usage: (profile.current_period_usage || 0) + 1 
-    }).eq('id', user.id);
-  }
-}
-
-// --- SALVAR ORÇAMENTO (Principal) ---
+// --- SALVAR (Mantido igual) ---
 export async function saveBudget(budgetData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Usuário não logado");
 
-  // Se já tem ID, é UPDATE (Não gasta limite)
+  // UPDATE
   if (budgetData.id) {
     const { error } = await supabase
       .from('budgets')
@@ -110,9 +108,8 @@ export async function saveBudget(budgetData) {
     return budgetData.id;
   } 
   
-  // Se é NOVO, é INSERT (Gasta limite)
+  // INSERT
   else {
-    // Busca ID legível
     const { data: lastBudget } = await supabase
       .from('budgets')
       .select('display_id')
@@ -139,10 +136,6 @@ export async function saveBudget(budgetData) {
       .single();
 
     if (error) throw error;
-
-    // SUCESSO: Incrementa o uso no perfil
-    await incrementUsage();
-
     return data.id;
   }
 }
