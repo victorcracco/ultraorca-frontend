@@ -1,12 +1,13 @@
-import React, { Suspense } from "react"; // Adicionado Suspense
+import React, { Suspense } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 // Componentes Globais
 import Layout from "./components/Layout";
 import SupportButton from "./components/SupportButton";
+import MobileNav from "./components/MobileNav"; // <--- 1. Importei a barra mobile
 import AdminRoute from "./components/AdminRoute"; 
 
-// Páginas Públicas (Site e Auth)
+// Páginas Públicas
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -15,7 +16,7 @@ import Register from "./pages/Register";
 import Terms from "./pages/legal/Terms";
 import Privacy from "./pages/legal/Privacy";
 
-// Páginas da Aplicação (Área Logada)
+// Páginas da Aplicação
 import Dashboard from "./pages/Dashboard";
 import NewBudget from "./pages/NewBudget";
 import Products from "./pages/Products";
@@ -23,28 +24,26 @@ import MyData from "./pages/MyData";
 import Tutorials from "./pages/Tutorials";
 import Subscription from "./pages/Subscription";
 
-// --- SEGURANÇA: LAZY LOADING ---
-// O código do AdminDashboard não será baixado por usuários comuns.
-// Ele só é carregado da rede quando a rota '/app/admin' é acessada.
+// --- LAZY LOADING ---
 const AdminDashboard = React.lazy(() => import("./pages/admin/AdminDashboard"));
 
 export default function App() {
   return (
     <BrowserRouter>
-      {/* Botão de Suporte flutuante visível em todas as páginas */}
+      {/* Botão de Suporte flutuante */}
       <SupportButton />
 
       <Routes>
-        {/* --- ROTAS PÚBLICAS (Site Institucional) --- */}
+        {/* --- ROTAS PÚBLICAS --- */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         
-        {/* Páginas Legais (Rodapé) */}
+        {/* Páginas Legais */}
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
 
-        {/* --- ROTAS DA APLICAÇÃO (Sistema SaaS) --- */}
+        {/* --- ROTAS DA APLICAÇÃO (SaaS) --- */}
         <Route path="/app" element={<Layout />}>
           <Route index element={<Dashboard />} />
           <Route path="new-budget" element={<NewBudget />} />
@@ -53,12 +52,11 @@ export default function App() {
           <Route path="tutorials" element={<Tutorials />} />
           <Route path="subscription" element={<Subscription />} />
           
-          {/* --- ÁREA ADMINISTRATIVA SEGURA --- */}
+          {/* --- ADMIN --- */}
           <Route element={<AdminRoute />}>
              <Route 
                path="admin" 
                element={
-                 // O Suspense exibe um loading enquanto baixa o arquivo do AdminDashboard
                  <Suspense fallback={
                    <div className="flex h-[80vh] items-center justify-center text-gray-400">
                      <div className="animate-pulse">Carregando módulo seguro...</div>
@@ -72,6 +70,11 @@ export default function App() {
 
         </Route>
       </Routes>
+
+      {/* --- 2. BARRA DE NAVEGAÇÃO MOBILE (Fixa no Rodapé) --- */}
+      {/* Ela usa useLocation internamente, então funciona aqui dentro */}
+      <MobileNav /> 
+
     </BrowserRouter>
   );
 }
