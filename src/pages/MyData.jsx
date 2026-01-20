@@ -1,211 +1,294 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "../services/supabase";
+import { Link } from "react-router-dom";
 
 export default function MyData() {
-  const [loading, setLoading] = useState(true); // Controla o "Carregando..."
-  const [saving, setSaving] = useState(false);  // Controla o botão de salvar
-  const [feedback, setFeedback] = useState("");
-
+  const [loading, setLoading] = useState(false);
+  const [cepLoading, setCepLoading] = useState(false);
+  
+  // Estado para os campos separados
   const [formData, setFormData] = useState({
     company_name: "",
+    cnpj: "", 
     phone: "",
-    address: "",
-    default_validity: "15",
-    primary_color: "#2563eb",
-    logo_url: "",
+    cep: "",
+    street: "",
+    number: "",
+    neighborhood: "",
+    city: "",
+    state: "",
+    logo_url: null
   });
 
-  const colorOptions = [
-    { name: "Preto", value: "#000000", bgClass: "bg-black" },
-    { name: "Cinza", value: "#4b5563", bgClass: "bg-gray-600" },
-    { name: "Azul", value: "#2563eb", bgClass: "bg-blue-600" },
-    { name: "Verde", value: "#16a34a", bgClass: "bg-green-600" },
-  ];
+  const [previewUrl, setPreviewUrl] = useState(null);
 
-  // 1. Buscar dados do Supabase ao carregar a página
   useEffect(() => {
-    async function loadProfile() {
-      try {
-        setLoading(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        if (user) {
-          const { data, error } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', user.id)
-            .single();
+    loadData();
+  }, []);
 
-          if (data) {
-            setFormData({
-              company_name: data.company_name || "",
-              phone: data.phone || data.whatsapp || "", // Usa whats do cadastro se não tiver fone
-              address: data.address || "",
-              default_validity: data.default_validity || "15",
-              primary_color: data.primary_color || "#2563eb",
-              logo_url: data.logo_url || "",
-            });
-          }
+  async function loadData() {
+    setLoading(true);
+    
+    // 1. Tenta carregar do Supabase (Prioridade)
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      
+      if (profile) {
+        setFormData({
+            company_name: profile.company_name || "",
+            cnpj: profile.cnpj || "",
+            phone: profile.phone || "",
+            cep: profile.cep || "",
+            street: profile.street || "",
+            number: profile.number || "",
+            neighborhood: profile.neighborhood || "",
+            city: profile.city || "",
+            state: profile.state || "",
+            logo_url: profile.logo_url || null
+        });
+        setPreviewUrl(profile.logo_url);
+      }
+    } else {
+        // 2. Fallback: LocalStorage
+        const localData = localStorage.getItem("orcasimples_dados_granulares");
+        if (localData) {
+            const parsed = JSON.parse(localData);
+            setFormData(parsed);
+            setPreviewUrl(parsed.logo_url);
+        }
+    }
+    setLoading(false);
+  }
+
+  // --- BUSCA CEP (ViaCEP) ---
+  const handleCepBlur = async (e) => {
+    const cep = e.target.value.replace(/\D/g, '');
+
+    if (cep.length === 8) {
+      setCepLoading(true);
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+        const data = await response.json();
+
+        if (!data.erro) {
+          setFormData(prev => ({
+            ...prev,
+            street: data.logradouro,
+            neighborhood: data.bairro,
+            city: data.localidade,
+            state: data.uf
+          }));
+          // Foca no número após carregar
+          document.getElementById("numberInput").focus();
+        } else {
+          alert("CEP não encontrado.");
         }
       } catch (error) {
-        console.error("Erro ao carregar perfil:", error);
+        console.error("Erro ao buscar CEP:", error);
       } finally {
-        setLoading(false); // Desliga o carregamento
+        setCepLoading(false);
       }
     }
-    loadProfile();
-  }, []);
+  };
+
+  // --- MÁSCARAS ---
+  const formatCNPJ = (v) => v.replace(/\D/g,'').replace(/^(\d{2})(\d)/,'$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/,'$1.$2.$3').replace(/\.(\d{3})(\d)/,'.$1/$2').replace(/(\d{4})(\d)/,'$1-$2').substr(0,18);
+  const formatPhone = (v) => v.replace(/\D/g,'').replace(/(\d{2})(\d)/,'($1) $2').replace(/(\d{5})(\d)/,'$1-$2').substr(0,15);
+  const formatCEP = (v) => v.replace(/\D/g,'').replace(/^(\d{5})(\d)/,'$1-$2').substr(0,9);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    let formattedValue = value;
+
+    if (name === 'cnpj') formattedValue = formatCNPJ(value);
+    if (name === 'phone') formattedValue = formatPhone(value);
+    if (name === 'cep') formattedValue = formatCEP(value);
+
+    setFormData(prev => ({ ...prev, [name]: formattedValue }));
   };
 
-  const handleLogoChange = (e) => {
+  // --- UPLOAD DE LOGO ---
+  const handleLogoUpload = async (e) => {
     const file = e.target.files[0];
-    if (file) {
-      if (file.size > 500 * 1024) { // Limite de 500KB para não pesar o banco
-        alert("A imagem deve ter no máximo 500KB.");
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData((prev) => ({ ...prev, logo_url: reader.result }));
-      };
-      reader.readAsDataURL(file);
-    }
+    if (!file) return;
+
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+
+    // Converte para Base64 para salvar
+    const reader = new FileReader();
+    reader.onloadend = () => {
+        setFormData(prev => ({ ...prev, logo_url: reader.result }));
+    };
+    reader.readAsDataURL(file);
   };
 
-  const handleSave = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    setFeedback("");
+  // --- SALVAR ---
+  const handleSave = async () => {
+    setLoading(true);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Usuário não logado");
-
-      const updates = {
-        id: user.id,
-        company_name: formData.company_name,
-        phone: formData.phone,
-        address: formData.address,
-        default_validity: parseInt(formData.default_validity),
-        primary_color: formData.primary_color,
-        logo_url: formData.logo_url,
-        updated_at: new Date(),
+      // 1. Monta o Endereço Completo (String única para o PDF ler facilmente)
+      const fullAddress = `${formData.street}, ${formData.number}${formData.neighborhood ? ` - ${formData.neighborhood}` : ''} - ${formData.city}/${formData.state} - CEP: ${formData.cep}`;
+      
+      // 2. Prepara dados
+      const profileData = {
+          company_name: formData.company_name,
+          cnpj: formData.cnpj,
+          phone: formData.phone,
+          // Dados granulares (para reabrir o form)
+          cep: formData.cep,
+          street: formData.street,
+          number: formData.number,
+          neighborhood: formData.neighborhood,
+          city: formData.city,
+          state: formData.state,
+          // Endereço completo (para o PDF)
+          address: fullAddress, 
+          logo_url: formData.logo_url,
+          updated_at: new Date()
       };
 
-      const { error } = await supabase.from('profiles').upsert(updates);
-      if (error) throw error;
+      // 3. Salva no Supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { error } = await supabase.from('profiles').upsert({ id: user.id, ...profileData });
+        if (error) throw error;
+      }
 
-      // Salva também no localStorage para o NewBudget ter acesso rápido (opcional, mas ajuda)
+      // 4. Salva no LocalStorage (Backup e Offline)
+      localStorage.setItem("orcasimples_dados_granulares", JSON.stringify(formData));
+      
+      // Salva formato legado para o PDF
       localStorage.setItem("orcasimples_dados", JSON.stringify({
-        nomeEmpresa: formData.company_name,
-        telefone: formData.phone,
-        endereco: formData.address,
-        corPadrao: formData.primary_color,
-        validadePadrao: formData.default_validity,
-        logo: formData.logo_url
+          ...profileData,
+          nomeEmpresa: formData.company_name, 
+          telefone: formData.phone, 
+          logo: formData.logo_url 
       }));
 
-      setFeedback("Dados salvos com sucesso na nuvem!");
-      setTimeout(() => setFeedback(""), 3000);
+      alert("Dados salvos com sucesso!");
 
     } catch (error) {
       console.error("Erro ao salvar:", error);
-      setFeedback("Erro ao salvar.");
+      alert("Erro ao salvar dados.");
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        <span className="ml-4 text-gray-500 font-medium">Carregando seus dados...</span>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-4xl mx-auto p-6">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-800">Meus Dados</h1>
-        {feedback && (
-          <div className={`px-4 py-2 rounded shadow text-sm font-semibold ${feedback.includes("Erro") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
-            {feedback}
-          </div>
-        )}
+      <div className="flex items-center gap-4 mb-8">
+        <Link to="/app" className="text-gray-500 hover:text-gray-700">&larr; Voltar</Link>
+        <h1 className="text-3xl font-bold text-gray-800">Dados da Empresa</h1>
       </div>
 
-      <form onSubmit={handleSave} className="space-y-6">
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">Informações da Empresa</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Empresa</label>
-              <input type="text" name="company_name" value={formData.company_name} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" />
+      <div className="grid md:grid-cols-3 gap-8">
+        
+        {/* LOGO */}
+        <div className="md:col-span-1">
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 text-center">
+            <h3 className="font-bold text-gray-700 mb-4">Sua Logo</h3>
+            
+            <div className="w-40 h-40 mx-auto bg-gray-50 rounded-full flex items-center justify-center border-2 border-dashed border-gray-300 overflow-hidden mb-4 relative group">
+              {previewUrl ? (
+                <img src={previewUrl} alt="Logo Preview" className="w-full h-full object-contain" />
+              ) : (
+                <span className="text-4xl text-gray-300">📷</span>
+              )}
+              <label htmlFor="logo-upload" className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center text-white text-sm font-bold opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                 Alterar
+              </label>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Telefone / WhatsApp</label>
-              <input type="text" name="phone" value={formData.phone} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Endereço Completo</label>
-              <input type="text" name="address" value={formData.address} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" />
-            </div>
+            
+            <input id="logo-upload" type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+            <label htmlFor="logo-upload" className="text-sm text-blue-600 font-bold cursor-pointer hover:underline">
+               {previewUrl ? "Trocar imagem" : "Carregar imagem"}
+            </label>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">Identidade Visual</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Logo</label>
-              <div className="flex items-start space-x-4">
-                <div className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center overflow-hidden bg-gray-50">
-                  {formData.logo_url ? <img src={formData.logo_url} className="w-full h-full object-contain" /> : <span className="text-gray-400 text-xs">Sem logo</span>}
+        {/* FORMULÁRIO */}
+        <div className="md:col-span-2 space-y-6">
+          
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+            <h3 className="font-bold text-gray-800 mb-4 border-b pb-2">Informações Básicas</h3>
+            <div className="space-y-4">
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Empresa</label>
+                    <input name="company_name" value={formData.company_name} onChange={handleChange} className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:border-blue-500" placeholder="Ex: Soluções Elétricas LTDA" />
                 </div>
-                <div className="flex flex-col space-y-2">
-                  <label className="cursor-pointer bg-white py-2 px-4 border border-gray-300 rounded shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 text-center">
-                    Carregar
-                    <input type="file" accept="image/*" className="hidden" onChange={handleLogoChange} />
-                  </label>
-                  {formData.logo_url && <button type="button" onClick={() => setFormData(p => ({...p, logo_url: ""}))} className="text-sm text-red-600">Remover</button>}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">CNPJ <span className="text-gray-400 text-xs font-normal">(Opcional)</span></label>
+                        <input name="cnpj" value={formData.cnpj} onChange={handleChange} maxLength={18} className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:border-blue-500" placeholder="00.000.000/0000-00" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp / Telefone</label>
+                        <input name="phone" value={formData.phone} onChange={handleChange} maxLength={15} className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:border-blue-500" placeholder="(00) 00000-0000" />
+                    </div>
                 </div>
-              </div>
             </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+            <h3 className="font-bold text-gray-800 mb-4 border-b pb-2">Endereço Completo</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">CEP</label>
+                    <div className="relative">
+                        <input name="cep" value={formData.cep} onChange={handleChange} onBlur={handleCepBlur} maxLength={9} className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:border-blue-500" placeholder="00000-000" />
+                        {cepLoading && <div className="absolute right-3 top-3.5 animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>}
+                    </div>
+                </div>
+                <div className="md:col-span-2 flex gap-4">
+                    <div className="flex-grow">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Cidade</label>
+                        <input name="city" value={formData.city} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg" />
+                    </div>
+                    <div className="w-20">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">UF</label>
+                        <input name="state" value={formData.state} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg text-center" />
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                <div className="md:col-span-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Rua</label>
+                    <input name="street" value={formData.street} onChange={handleChange} className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:border-blue-500" placeholder="Nome da rua" />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Nº</label>
+                    <input id="numberInput" name="number" value={formData.number} onChange={handleChange} className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:border-blue-500" placeholder="123" />
+                </div>
+            </div>
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Cor Principal</label>
-              <div className="flex space-x-3">
-                {colorOptions.map((c) => (
-                  <button key={c.value} type="button" onClick={() => setFormData(p => ({...p, primary_color: c.value}))} className={`w-10 h-10 rounded-full border-2 ${c.bgClass} ${formData.primary_color === c.value ? "border-gray-800 ring-2" : "border-transparent"}`} />
-                ))}
-              </div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Bairro</label>
+                <input name="neighborhood" value={formData.neighborhood} onChange={handleChange} className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:border-blue-500" placeholder="Bairro" />
             </div>
+            
           </div>
-        </div>
 
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-           <h2 className="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">Preferências</h2>
-           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Validade Padrão (Dias)</label>
-            <select name="default_validity" value={formData.default_validity} onChange={handleChange} className="w-full md:w-1/3 p-2 border border-gray-300 rounded">
-              <option value="7">7 dias</option>
-              <option value="15">15 dias</option>
-              <option value="30">30 dias</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="flex justify-end">
-          <button type="submit" disabled={saving} className={`bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700 shadow-lg ${saving ? "opacity-70 cursor-not-allowed" : ""}`}>
-            {saving ? "Salvando..." : "Salvar Meus Dados"}
+          <button 
+            onClick={handleSave} 
+            disabled={loading}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition transform active:scale-95 flex justify-center items-center gap-2"
+          >
+            {loading ? <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div> : "Salvar Alterações"}
           </button>
+
         </div>
-      </form>
+      </div>
     </div>
   );
 }

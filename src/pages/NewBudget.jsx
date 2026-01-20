@@ -2,8 +2,7 @@ import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate, Link } from "react-router-dom";
 import ProductSelector from "../components/ProductSelector";
 import { getProducts } from "../services/storage";
-// CERTIFIQUE-SE que o arquivo na pasta utils se chama 'pdfGenerator.js'
-import { generateBudgetPDF } from "../utils/generateBudgetPDF.js"; 
+import { generateBudgetPDF } from "../utils/generateBudgetPDF"; 
 import { saveBudget, getBudgetById, checkPlanLimit } from "../services/budgetService";
 
 export default function NewBudget() {
@@ -11,7 +10,7 @@ export default function NewBudget() {
   const navigate = useNavigate();
   const editId = searchParams.get("id");
 
-  // Estado do formulário
+  // --- ESTADOS ---
   const [budgetId, setBudgetId] = useState(null);
   const [displayId, setDisplayId] = useState(null);
   
@@ -20,31 +19,30 @@ export default function NewBudget() {
   const [items, setItems] = useState([]);
   const [products, setProducts] = useState([]);
   
-  // Configurações visuais
+  // Configurações Visuais
   const [layout, setLayout] = useState("modern");
   const [primaryColor, setPrimaryColor] = useState("#2563eb");
   const [validityDays, setValidityDays] = useState("15");
 
-  // Estados de UI e Dados Auxiliares
+  // Auxiliares
   const [companyData, setCompanyData] = useState(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [modalMessage, setModalMessage] = useState({ title: "", text: "" }); // Novo estado para mensagem dinâmica
+  const [modalMessage, setModalMessage] = useState({ title: "", text: "" });
   const [saveFeedback, setSaveFeedback] = useState("");
   const [loading, setLoading] = useState(false);
 
   // Opções de Cores
   const colorOptions = [
-    { name: "Preto", value: "#000000", bgClass: "bg-black" },
-    { name: "Cinza", value: "#4b5563", bgClass: "bg-gray-600" },
     { name: "Azul", value: "#2563eb", bgClass: "bg-blue-600" },
     { name: "Verde", value: "#16a34a", bgClass: "bg-green-600" },
+    { name: "Preto", value: "#000000", bgClass: "bg-black" },
+    { name: "Cinza", value: "#4b5563", bgClass: "bg-gray-600" },
   ];
 
-  // --- 1. CARREGAMENTO INICIAL (Banco ou Rascunho) ---
+  // --- 1. CARREGAMENTO INICIAL ---
   useEffect(() => {
     setProducts(getProducts());
 
-    // Carrega dados da empresa do cache
     const savedData = localStorage.getItem("orcasimples_dados");
     if (savedData) {
       const parsed = JSON.parse(savedData);
@@ -54,7 +52,6 @@ export default function NewBudget() {
     }
 
     async function loadBudget() {
-      // CENÁRIO A: Edição (Vem do Banco)
       if (editId) {
         setLoading(true);
         const savedBudget = await getBudgetById(editId);
@@ -69,13 +66,11 @@ export default function NewBudget() {
         }
         setLoading(false);
       } 
-      // CENÁRIO B: Novo (Tenta pegar do Rascunho Local)
       else {
         const draft = localStorage.getItem("budget_draft");
         if (draft) {
           try {
             const parsedDraft = JSON.parse(draft);
-            // Só restaura se tiver conteúdo útil
             if (parsedDraft.client || parsedDraft.items?.length > 0) {
               setClient(parsedDraft.client || "");
               setClientAddress(parsedDraft.clientAddress || "");
@@ -91,25 +86,17 @@ export default function NewBudget() {
     loadBudget();
   }, [editId]);
 
-  // --- 2. AUTO-SAVE (Salva no navegador a cada digitação) ---
+  // --- 2. AUTO-SAVE ---
   useEffect(() => {
-    // Só salva rascunho se for um orçamento novo (não estamos editando um salvo)
     if (!editId && !budgetId) {
-      const draftData = {
-        client,
-        clientAddress,
-        items,
-        primaryColor
-      };
-      
-      // Salva se tiver pelo menos nome ou itens
+      const draftData = { client, clientAddress, items, primaryColor };
       if (client || items.length > 0) {
         localStorage.setItem("budget_draft", JSON.stringify(draftData));
       }
     }
   }, [client, clientAddress, items, primaryColor, editId, budgetId]);
 
-  // --- Funções de Itens ---
+  // --- FUNÇÕES DE ITENS ---
   function addEmptyItem() {
     setItems([...items, { id: crypto.randomUUID(), description: "", quantity: 1, price: "" }]);
   }
@@ -132,45 +119,57 @@ export default function NewBudget() {
     return sum + (qty * price);
   }, 0);
 
+  // --- VALIDAÇÃO (NOVA) ---
+  const validateForm = () => {
+    if (!client.trim()) {
+        alert("Por favor, preencha o nome do cliente.");
+        return false;
+    }
+    if (items.length === 0) {
+        alert("Adicione pelo menos um item ao orçamento.");
+        return false;
+    }
+    // Verifica se tem item sem descrição
+    const hasEmpty = items.some(item => !item.description || item.description.trim() === "");
+    if (hasEmpty) {
+        alert("Existem itens sem descrição! Preencha ou remova os itens vazios.");
+        return false;
+    }
+    return true;
+  };
+
   // --- AÇÕES ---
-  
   const handleGeneratePDF = () => {
+    if (!validateForm()) return;
+
     generateBudgetPDF({
       client,
       clientAddress,
       items,
       total,
-      layout,
+      layout, 
       primaryColor,
       companyData,
       validityDays,
-      // ⚠️ AQUI ESTÁ A CORREÇÃO DO "PRÉVIA":
-      // Passamos null se não tiver ID. O pdfGenerator vai criar um nome com data/hora.
       displayId: displayId || null 
     });
   };
 
   const handleSaveBudget = async () => {
+    if (!validateForm()) return;
+
     setLoading(true);
     try {
-      // 1. VERIFICAÇÃO DE PLANO (Limites)
       if (!budgetId && !editId) {
         const check = await checkPlanLimit();
-        
         if (!check.allowed) {
           setLoading(false);
-          // Mensagem personalizada baseada no plano
-          if (check.plan === 'starter') {
-            setModalMessage({
-              title: "Limite Mensal Atingido",
-              text: "Você atingiu o limite de 30 orçamentos do plano Iniciante neste mês. Faça o upgrade para o PRO e tenha acesso ilimitado."
-            });
-          } else {
-            setModalMessage({
-              title: "Limite Gratuito Atingido",
-              text: "Você já usou seus 3 orçamentos gratuitos de teste. Assine um plano para continuar criando."
-            });
-          }
+          setModalMessage({
+             title: "Limite Atingido",
+             text: check.plan === 'starter' 
+               ? "Você atingiu o limite de 30 orçamentos do plano Iniciante." 
+               : "Você atingiu o limite de 3 orçamentos gratuitos."
+          });
           setShowUpgradeModal(true);
           return;
         }
@@ -188,11 +187,9 @@ export default function NewBudget() {
 
       const newId = await saveBudget(budgetData);
       setBudgetId(newId);
-      
-      // --- 3. LIMPEZA DO RASCUNHO APÓS SALVAR ---
       localStorage.removeItem("budget_draft");
 
-      setSaveFeedback("Orçamento salvo na nuvem!");
+      setSaveFeedback("Salvo com sucesso!");
       setTimeout(() => setSaveFeedback(""), 3000);
 
       if (!displayId) {
@@ -202,7 +199,7 @@ export default function NewBudget() {
 
     } catch (error) {
       console.error("Erro ao salvar:", error);
-      alert("Erro ao salvar orçamento. Verifique sua conexão.");
+      alert("Erro ao salvar orçamento.");
     } finally {
       setLoading(false);
     }
@@ -212,7 +209,7 @@ export default function NewBudget() {
     return (
         <div className="flex flex-col items-center justify-center h-screen text-gray-500">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-            <p>Carregando orçamento...</p>
+            <p>Carregando...</p>
         </div>
     );
   }
@@ -220,24 +217,20 @@ export default function NewBudget() {
   return (
     <div className="max-w-7xl mx-auto p-6 relative">
       
-      {/* MODAL UPGRADE / LIMITE */}
+      {/* MODAL UPGRADE */}
       {showUpgradeModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center animate-fade-in-up">
             <div className="bg-yellow-100 text-yellow-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">🔒</div>
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">{modalMessage.title || "Limite Atingido"}</h2>
-            <p className="text-gray-600 mb-6">
-              {modalMessage.text || "Faça um upgrade para continuar criando orçamentos."}
-            </p>
-            <Link to="/app/subscription" className="block w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg mb-3">
-              Ver Planos
-            </Link>
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">{modalMessage.title}</h2>
+            <p className="text-gray-600 mb-6">{modalMessage.text}</p>
+            <Link to="/app/subscription" className="block w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg mb-3">Ver Planos</Link>
             <button onClick={() => setShowUpgradeModal(false)} className="text-gray-400 text-sm hover:text-gray-600 underline">Cancelar</button>
           </div>
         </div>
       )}
 
-      {/* Cabeçalho */}
+      {/* CABEÇALHO */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
          <div className="flex items-center gap-4">
             <button onClick={() => navigate("/app")} className="text-gray-500 hover:text-gray-700 transition">&larr; Voltar</button>
@@ -245,13 +238,9 @@ export default function NewBudget() {
                 <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3">
                     {editId || budgetId ? "Editar Orçamento" : "Novo Orçamento"}
                     {displayId ? (
-                        <span className="bg-blue-100 text-blue-700 text-lg px-3 py-1 rounded-full font-mono">
-                            #{displayId}
-                        </span>
+                        <span className="bg-blue-100 text-blue-700 text-lg px-3 py-1 rounded-full font-mono">#{displayId}</span>
                     ) : (
-                        <span className="bg-gray-100 text-gray-500 text-xs px-2 py-1 rounded uppercase tracking-wide">
-                            Rascunho
-                        </span>
+                        <span className="bg-gray-100 text-gray-500 text-xs px-2 py-1 rounded uppercase tracking-wide">Rascunho</span>
                     )}
                 </h1>
             </div>
@@ -262,14 +251,15 @@ export default function NewBudget() {
         
         {/* ESQUERDA: FORMULÁRIO */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Cliente */}
+          
+          {/* CLIENTE */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-            <h2 className="text-lg font-bold text-gray-700 mb-4 border-b pb-2">1. Dados do Cliente</h2>
+            <h2 className="text-lg font-bold text-gray-700 mb-4 border-b pb-2">1. Cliente</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nome <span className="text-red-500">*</span></label>
                 <input 
-                    className="w-full p-2.5 border border-gray-300 rounded-lg outline-none focus:border-blue-500 transition" 
+                    className={`w-full p-2.5 border rounded-lg outline-none focus:border-blue-500 transition ${!client ? 'border-gray-300' : 'border-blue-500 bg-blue-50'}`} 
                     placeholder="Ex: João da Silva" 
                     value={client} 
                     onChange={(e) => setClient(e.target.value)} 
@@ -277,17 +267,12 @@ export default function NewBudget() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Endereço</label>
-                <input 
-                    className="w-full p-2.5 border border-gray-300 rounded-lg outline-none focus:border-blue-500 transition" 
-                    placeholder="Rua, Bairro..." 
-                    value={clientAddress} 
-                    onChange={(e) => setClientAddress(e.target.value)} 
-                />
+                <input className="w-full p-2.5 border border-gray-300 rounded-lg outline-none focus:border-blue-500 transition" placeholder="Rua, Bairro..." value={clientAddress} onChange={(e) => setClientAddress(e.target.value)} />
               </div>
             </div>
           </div>
 
-          {/* Itens */}
+          {/* ITENS */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
             <div className="flex justify-between items-center mb-4 border-b pb-2">
               <h2 className="text-lg font-bold text-gray-700">2. Itens</h2>
@@ -311,55 +296,46 @@ export default function NewBudget() {
 
             <div className="space-y-3">
               {items.map((item, index) => (
-                <div key={item.id} className="flex flex-col md:flex-row gap-3 items-end md:items-center bg-white p-3 rounded-lg border border-gray-200 hover:border-blue-300 transition-colors">
+                <div key={item.id} className={`flex flex-col md:flex-row gap-3 items-end md:items-center bg-white p-3 rounded-lg border hover:border-blue-300 transition-colors ${(!item.description) ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}>
                   <span className="hidden md:block text-gray-400 text-xs w-6 text-center">{index + 1}.</span>
                   
+                  {/* Descrição */}
                   <div className="flex-grow w-full">
                     <label className="md:hidden text-xs text-gray-500 font-bold mb-1">Descrição</label>
                     <input 
-                        className="w-full p-2 border border-gray-300 rounded text-sm outline-none focus:border-blue-500" 
-                        placeholder="Descrição" 
-                        value={item.description} 
-                        onChange={(e) => updateItem(item.id, "description", e.target.value)} 
+                      className="w-full p-2 border border-gray-300 rounded text-sm outline-none focus:border-blue-500" 
+                      placeholder="Descrição (Obrigatório)" 
+                      value={item.description} 
+                      onChange={(e) => updateItem(item.id, "description", e.target.value)} 
                     />
                   </div>
                   
+                  {/* Quantidade */}
                   <div className="w-full md:w-24">
                     <label className="md:hidden text-xs text-gray-500 font-bold mb-1">Qtd</label>
-                    <input 
-                        type="number" 
-                        className="w-full p-2 border border-gray-300 rounded text-sm text-center outline-none focus:border-blue-500" 
-                        value={item.quantity} 
-                        onChange={(e) => updateItem(item.id, "quantity", e.target.value)} 
-                    />
+                    <input type="number" className="w-full p-2 border border-gray-300 rounded text-sm text-center outline-none focus:border-blue-500" value={item.quantity} onChange={(e) => updateItem(item.id, "quantity", e.target.value)} />
                   </div>
                   
+                  {/* Valor */}
                   <div className="w-full md:w-32">
                     <label className="md:hidden text-xs text-gray-500 font-bold mb-1">Valor Unit.</label>
-                    <input 
-                        type="number" 
-                        placeholder="0,00"
-                        className="w-full p-2 border border-gray-300 rounded text-sm text-right outline-none focus:border-blue-500" 
-                        value={item.price} 
-                        onChange={(e) => updateItem(item.id, "price", e.target.value)} 
-                    />
+                    <input type="number" placeholder="0,00" className="w-full p-2 border border-gray-300 rounded text-sm text-right outline-none focus:border-blue-500" value={item.price} onChange={(e) => updateItem(item.id, "price", e.target.value)} />
                   </div>
                   
+                  {/* Botão Remover */}
                   <div className="flex justify-end md:w-auto">
-                    <button onClick={() => removeItem(item.id)} className="text-gray-400 hover:text-red-500 p-2 rounded hover:bg-red-50 transition" title="Remover item">
+                    <button onClick={() => removeItem(item.id)} className="text-gray-400 hover:text-red-500 p-2 rounded hover:bg-red-50 transition">
                         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
                   </div>
                 </div>
               ))}
             </div>
-            <button onClick={addEmptyItem} className="mt-4 flex items-center gap-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 px-3 py-2 rounded transition">
-                + Item Manual
-            </button>
+            <button onClick={addEmptyItem} className="mt-4 flex items-center gap-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 px-3 py-2 rounded transition">+ Item Manual</button>
           </div>
         </div>
 
-        {/* DIREITA: RESUMO */}
+        {/* DIREITA: PAINEL DE AÇÕES */}
         <div className="lg:col-span-1">
           <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 sticky top-6">
             <h2 className="text-lg font-bold text-gray-800 mb-6">Resumo</h2>
@@ -371,6 +347,30 @@ export default function NewBudget() {
               <span className="block text-3xl font-bold text-gray-900">{total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
             </div>
 
+            {/* SELETOR DE MODELOS DE PDF */}
+            <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Modelo do PDF</label>
+                <div className="grid grid-cols-2 gap-3">
+                    <button onClick={() => setLayout("modern")} className={`p-3 rounded-lg border-2 text-left transition-all ${layout === "modern" ? "border-blue-600 bg-blue-50 ring-1 ring-blue-600" : "border-gray-200 hover:border-blue-300"}`}>
+                        <div className="h-2 w-full bg-blue-500 rounded-full mb-2"></div>
+                        <span className="text-xs font-bold text-gray-700">Moderno</span>
+                    </button>
+                    <button onClick={() => setLayout("executive")} className={`p-3 rounded-lg border-2 text-left transition-all ${layout === "executive" ? "border-blue-600 bg-blue-50 ring-1 ring-blue-600" : "border-gray-200 hover:border-blue-300"}`}>
+                        <div className="h-4 w-full bg-gray-800 rounded mb-2"></div>
+                        <span className="text-xs font-bold text-gray-700">Executivo</span>
+                    </button>
+                    <button onClick={() => setLayout("minimal")} className={`p-3 rounded-lg border-2 text-left transition-all ${layout === "minimal" ? "border-blue-600 bg-blue-50 ring-1 ring-blue-600" : "border-gray-200 hover:border-blue-300"}`}>
+                        <div className="h-2 w-1/2 bg-gray-300 rounded-full mb-2"></div>
+                        <span className="text-xs font-bold text-gray-700">Clean</span>
+                    </button>
+                    <button onClick={() => setLayout("classic")} className={`p-3 rounded-lg border-2 text-left transition-all ${layout === "classic" ? "border-blue-600 bg-blue-50 ring-1 ring-blue-600" : "border-gray-200 hover:border-blue-300"}`}>
+                        <div className="border border-gray-400 h-4 w-full mb-2 px-1"></div>
+                        <span className="text-xs font-bold text-gray-700">Clássico</span>
+                    </button>
+                </div>
+            </div>
+
+            {/* CONFIGURAÇÕES VISUAIS */}
             <div className="mb-6 space-y-4">
                <div>
                    <label className="block text-sm font-medium text-gray-700 mb-2">Cor do Documento</label>
@@ -382,12 +382,8 @@ export default function NewBudget() {
                </div>
                
                <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-2">Validade (Dias)</label>
-                   <select 
-                     value={validityDays} 
-                     onChange={(e) => setValidityDays(e.target.value)}
-                     className="w-full p-2 border border-gray-300 rounded-lg text-sm bg-white"
-                   >
+                   <label className="block text-sm font-medium text-gray-700 mb-2">Validade</label>
+                   <select value={validityDays} onChange={(e) => setValidityDays(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg text-sm bg-white">
                        <option value="7">7 dias</option>
                        <option value="15">15 dias</option>
                        <option value="30">30 dias</option>
@@ -395,6 +391,7 @@ export default function NewBudget() {
                </div>
             </div>
 
+            {/* BOTÕES DE AÇÃO */}
             <div className="space-y-3">
               <button 
                 className={`w-full py-4 px-6 rounded-xl font-bold text-white shadow-lg flex justify-center items-center gap-2 transition-transform active:scale-95 ${(!client || items.length === 0) ? "bg-gray-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-700 hover:shadow-green-200"}`}
@@ -410,12 +407,7 @@ export default function NewBudget() {
                 disabled={!client || items.length === 0}
                 onClick={handleSaveBudget}
               >
-                {loading ? <div className="animate-spin h-5 w-5 border-b-2 border-blue-600 rounded-full"></div> : (
-                    <>
-                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
-                        {editId || budgetId ? "Salvar Alterações" : "Salvar no Histórico"}
-                    </>
-                )}
+                {loading ? <div className="animate-spin h-5 w-5 border-b-2 border-blue-600 rounded-full"></div> : (editId || budgetId ? "Salvar Alterações" : "Salvar no Histórico")}
               </button>
             </div>
             

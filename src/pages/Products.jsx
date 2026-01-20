@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { getProducts, saveProducts } from "../services/storage";
+import { Link } from "react-router-dom";
 
 export default function Products() {
   const [products, setProducts] = useState([]);
+  
+  // Estados do Formulário
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
+  const [type, setType] = useState("service"); // 'service' ou 'product'
+  
   const [feedback, setFeedback] = useState("");
 
   useEffect(() => {
@@ -21,14 +26,19 @@ export default function Products() {
         id: crypto.randomUUID(),
         name,
         price: Number(price),
+        type, 
       },
     ];
 
     setProducts(newProducts);
     saveProducts(newProducts);
+    
+    // Limpa campos
     setName("");
     setPrice("");
-    setFeedback("Produto adicionado com sucesso!");
+    setType("service"); 
+    
+    setFeedback("Item adicionado com sucesso!");
     setTimeout(() => setFeedback(""), 2000);
   }
 
@@ -40,20 +50,19 @@ export default function Products() {
 
   return (
     <div className="max-w-5xl mx-auto p-6">
-      {/* Cabeçalho */}
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800">Produtos & Serviços</h1>
-          <p className="text-gray-500 mt-1">Gerencie os itens que você oferece.</p>
-        </div>
-        {feedback && (
-          <div className="bg-green-100 text-green-700 px-4 py-2 rounded shadow-sm text-sm font-semibold animate-fade-in-down">
-            {feedback}
-          </div>
-        )}
+      <div className="flex items-center gap-4 mb-8">
+        <Link to="/app" className="text-gray-500 hover:text-gray-700">&larr; Voltar</Link>
+        <h1 className="text-2xl font-bold text-gray-800">Catálogo</h1>
       </div>
 
-      {/* ÁREA SUPERIOR: Formulário de Cadastro (Barra Horizontal) */}
+      {feedback && (
+          <div className="bg-green-100 text-green-700 px-4 py-3 rounded-lg shadow-sm text-sm font-semibold mb-6 flex items-center gap-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+            {feedback}
+          </div>
+      )}
+
+      {/* ÁREA SUPERIOR: Formulário de Cadastro */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-8">
         <h2 className="text-lg font-bold text-gray-700 mb-4 flex items-center gap-2">
           <span className="bg-blue-100 text-blue-600 p-1.5 rounded-md">
@@ -63,19 +72,42 @@ export default function Products() {
         </h2>
         
         <form onSubmit={addProduct} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-          {/* Campo Descrição - Ocupa metade da linha no desktop */}
-          <div className="md:col-span-6">
+          
+          {/* SELETOR DE TIPO COM ÍCONES REAIS */}
+          <div className="md:col-span-3">
+             <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+             <div className="flex gap-2">
+                <button 
+                  type="button"
+                  onClick={() => setType("service")}
+                  className={`flex-1 py-2.5 rounded-lg border flex justify-center items-center gap-2 transition-all ${type === "service" ? "bg-blue-50 border-blue-500 text-blue-700 ring-1 ring-blue-500" : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50"}`}
+                >
+                   {/* Ícone Ferramenta (Serviço) */}
+                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                   <span className="text-xs font-bold">Serviço</span>
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setType("product")}
+                  className={`flex-1 py-2.5 rounded-lg border flex justify-center items-center gap-2 transition-all ${type === "product" ? "bg-orange-50 border-orange-500 text-orange-700 ring-1 ring-orange-500" : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50"}`}
+                >
+                   {/* Ícone Caixa (Produto) */}
+                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+                   <span className="text-xs font-bold">Produto</span>
+                </button>
+             </div>
+          </div>
+
+          <div className="md:col-span-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
             <input
               className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-              placeholder="Ex: Consultoria Técnica"
+              placeholder="Nome do item..."
               value={name}
               onChange={(e) => setName(e.target.value)}
-              autoFocus
             />
           </div>
           
-          {/* Campo Valor - Ocupa 3 colunas no desktop */}
           <div className="md:col-span-3">
             <label className="block text-sm font-medium text-gray-700 mb-1">Valor (R$)</label>
             <input
@@ -88,53 +120,54 @@ export default function Products() {
             />
           </div>
 
-          {/* Botão - Ocupa o restante */}
-          <div className="md:col-span-3">
+          <div className="md:col-span-2">
             <button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition-colors shadow flex justify-center items-center gap-2 h-[46px]" // Altura fixa para alinhar com inputs
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition-colors shadow flex justify-center items-center h-[46px]"
             >
-              <span>Adicionar</span>
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-              </svg>
+              Salvar
             </button>
           </div>
         </form>
       </div>
 
-      {/* ÁREA INFERIOR: Listagem dos Produtos */}
+      {/* ÁREA INFERIOR: Listagem */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {products.length === 0 ? (
           <div className="p-12 text-center">
             <div className="inline-block p-4 rounded-full bg-gray-100 text-gray-400 mb-4">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" /></svg>
             </div>
-            <p className="text-gray-500 font-medium">Nenhum produto cadastrado.</p>
-            <p className="text-sm text-gray-400">Utilize o formulário acima para adicionar itens.</p>
+            <p className="text-gray-500 font-medium">Nenhum item cadastrado.</p>
           </div>
         ) : (
           <table className="w-full text-left">
             <thead className="bg-gray-50 text-gray-600 text-sm uppercase font-semibold">
               <tr>
                 <th className="p-4 pl-6">Descrição</th>
-                <th className="p-4 text-right">Valor Unitário</th>
+                <th className="p-4 text-right">Valor</th>
                 <th className="p-4 text-center w-24">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {products.map((product) => (
                 <tr key={product.id} className="hover:bg-gray-50 transition-colors group">
-                  <td className="p-4 pl-6 font-medium text-gray-800">{product.name}</td>
+                  <td className="p-4 pl-6 font-medium text-gray-800 flex items-center gap-3">
+                    {/* ÍCONE SVG NA LISTA */}
+                    <span className={`p-1.5 rounded-md flex items-center justify-center ${product.type === 'product' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+                        {product.type === 'product' ? (
+                           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+                        ) : (
+                           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                        )}
+                    </span>
+                    {product.name}
+                  </td>
                   <td className="p-4 text-right font-mono text-gray-600">
-                    {product.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                    {Number(product.price).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                   </td>
                   <td className="p-4 text-center">
-                    <button
-                      onClick={() => removeProduct(product.id)}
-                      className="text-gray-400 hover:text-red-600 transition-colors p-2 rounded-full hover:bg-red-50"
-                      title="Excluir item"
-                    >
+                    <button onClick={() => removeProduct(product.id)} className="text-gray-400 hover:text-red-600 transition-colors p-2 rounded-full hover:bg-red-50">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
                   </td>
