@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../services/supabase";
-import { loadStripe } from "@stripe/stripe-js";
 
-// COLOQUE SUA CHAVE PÚBLICA DO STRIPE AQUI (Começa com pk_test_ ou pk_live_)
-const STRIPE_PUBLIC_KEY = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
+// Nota: Com o novo método de redirecionamento via URL do Backend, 
+// não precisamos carregar o loadStripe aqui no front para iniciar o checkout.
 
 export default function Subscription() {
   const [loading, setLoading] = useState(false);
@@ -15,7 +14,6 @@ export default function Subscription() {
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState("pro"); 
   
-  // Controle do Modal de Pagamento
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   const plans = {
@@ -85,7 +83,6 @@ export default function Subscription() {
           const isPro = await checkSubscription(user.id);
           setCheckingStatus(false);
 
-          // Polling para verificar se o pagamento caiu (após voltar do checkout)
           if (!isPro) {
             intervalId = setInterval(async () => {
               const found = await checkSubscription(user.id);
@@ -112,7 +109,7 @@ export default function Subscription() {
     setShowPaymentModal(true);
   };
 
-  // --- 3. PROCESSAMENTO DE PAGAMENTO (HÍBRIDO) ---
+  // --- 3. PROCESSAMENTO DE PAGAMENTO (CORRIGIDO) ---
   const processPayment = async (method) => {
     setLoading(true);
     try {
@@ -128,44 +125,51 @@ export default function Subscription() {
         isUpgrade: isUpgrading
       };
 
-      // >>>> OPÇÃO A: CARTÃO (STRIPE) <<<<
+      let endpoint = method === 'stripe' ? '/api/checkout-stripe' : '/api/checkout-asaas';
+
+      const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+      });
+
+      // Tratamento de erro se a Vercel retornar HTML (Erro 500)
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.indexOf("application/json") === -1) {
+          const text = await response.text();
+          console.error("Erro Crítico do Servidor:", text);
+          throw new Error("Erro interno no servidor. Verifique os Logs da Vercel.");
+      }
+
+      const data = await response.json();
+
+      if (!response.ok) {
+          throw new Error(data.error || "Falha ao processar pagamento");
+      }
+
+      // >>>> REDIRECIONAMENTO STRIPE (URL) <<<<
       if (method === 'stripe') {
-          const stripe = await loadStripe(STRIPE_PUBLIC_KEY);
-          
-          const response = await fetch('/api/checkout-stripe', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload)
-          });
-          
-          const { sessionId, error } = await response.json();
-          if (error) throw new Error(error);
-          
-          // Redireciona para o Checkout Seguro do Stripe
-          await stripe.redirectToCheckout({ sessionId });
+          if (data.url) {
+              window.location.href = data.url; // Pula para a página do Stripe
+          } else {
+              throw new Error("URL de pagamento não recebida.");
+          }
       } 
       
-      // >>>> OPÇÃO B: PIX (ASAAS) <<<<
+      // >>>> REDIRECIONAMENTO ASAAS (URL) <<<<
       else if (method === 'asaas') {
-          const response = await fetch('/api/checkout-asaas', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload)
-          });
-
-          const data = await response.json();
-          if (!response.ok) throw new Error(data.error || "Erro no Asaas");
-
-          // Redireciona para a fatura do Asaas ou mostra Pix Copia e Cola
           if (data.invoiceUrl) {
-              window.location.href = data.invoiceUrl;
+              window.location.href = data.invoiceUrl; // Pula para a fatura do Asaas
+          } else {
+              throw new Error("Link da fatura não gerado.");
           }
       }
 
     } catch (error) {
       console.error(error);
-      alert("Erro ao iniciar pagamento: " + error.message);
-      setLoading(false); // Só tira loading se der erro, senão espera redirect
+      alert(`Erro: ${error.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -201,7 +205,7 @@ export default function Subscription() {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-600 mb-4"></div>
-        <p className="text-gray-500 font-medium">Carregando informações...</p>
+        <p className="text-gray-500 font-medium">Carregando...</p>
       </div>
     );
   }
@@ -261,7 +265,7 @@ export default function Subscription() {
   return (
     <div className="max-w-7xl mx-auto py-12 px-4 relative">
       
-      {/* --- MODAL DE PAGAMENTO (O PULO DO GATO) --- */}
+      {/* --- MODAL DE PAGAMENTO --- */}
       {showPaymentModal && (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 relative">
@@ -294,7 +298,7 @@ export default function Subscription() {
                         className="w-full border-2 border-gray-200 hover:border-green-500 hover:bg-green-50 p-4 rounded-xl flex items-center justify-between transition"
                     >
                         <div className="text-left">
-                            <span className="block font-bold text-gray-700">Pix Mensal</span>
+                            <span className="block font-bold text-gray-700">Pix ou Boleto</span>
                             <span className="text-xs text-gray-500">Enviamos o código todo mês no seu Zap</span>
                         </div>
                         <div className="text-2xl">💠</div>
