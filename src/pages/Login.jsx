@@ -77,9 +77,10 @@ export default function Login() {
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="block text-sm font-bold text-gray-700">Senha</label>
-                <a href="#" className="text-xs font-semibold text-blue-600 hover:underline" onClick={(e) => { e.preventDefault(); alert("Funcionalidade de recuperação em breve."); }}>
+                {/* --- MUDANÇA AQUI: Link real para a página de recuperação --- */}
+                <Link to="/forgot-password" className="text-xs font-semibold text-blue-600 hover:underline">
                   Esqueceu a senha?
-                </a>
+                </Link>
               </div>
               <input
                 type="password"
@@ -99,8 +100,8 @@ export default function Login() {
               {loading ? (
                  <>
                   <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
-                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
                   </svg>
                   <span>Entrando...</span>
                 </>
