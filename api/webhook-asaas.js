@@ -7,17 +7,12 @@ export default async function handler(req, res) {
 
   const { event, payment } = req.body;
   
-  // Opcional: Verifique se existe um token de segurança no header se quiser proteger mais
-  // const token = req.headers['asaas-access-token'];
-
-  // Tipos de eventos que confirmam pagamento
   const eventosDeSucesso = ['PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'];
 
   if (eventosDeSucesso.includes(event)) {
-    const userId = payment.externalReference; // O ID que enviamos na hora de criar
+    const userId = payment.externalReference;
     const subscriptionId = payment.subscription;
     
-    // Tenta descobrir o plano pela descrição ou valor (lógica simples)
     let planType = 'pro';
     if (payment.description && payment.description.toLowerCase().includes('starter')) planType = 'starter';
     if (payment.description && payment.description.toLowerCase().includes('anual')) planType = 'annual';
@@ -25,14 +20,14 @@ export default async function handler(req, res) {
     if (userId) {
       console.log(`💠 Pagamento Asaas confirmado para User: ${userId}`);
 
-      // Atualiza o banco
+      // ATUALIZAÇÃO: Usando 'subscription_id' em vez de 'external_id'
       const { error } = await supabase
         .from('subscriptions')
         .upsert({
           user_id: userId,
           status: 'active',
           provider: 'asaas',
-          external_id: subscriptionId, // ID da assinatura no Asaas
+          subscription_id: subscriptionId, // <--- NOME CORRIGIDO AQUI
           plan_type: planType,
           updated_at: new Date()
         }, { onConflict: 'user_id' });
@@ -41,7 +36,6 @@ export default async function handler(req, res) {
     }
   } 
   
-  // Tratamento de inadimplência (Opcional)
   else if (event === 'PAYMENT_OVERDUE') {
      const userId = payment.externalReference;
      if (userId) {
