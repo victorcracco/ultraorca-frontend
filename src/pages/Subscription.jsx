@@ -50,7 +50,7 @@ export default function Subscription() {
   const selectedPlan = plans[selectedPlanId];
 
   // =========================================================
-  // 1. VERIFICAÇÃO DE ASSINATURA (Adaptado para sua tabela)
+  // 1. VERIFICAÇÃO DE ASSINATURA (Atualizado)
   // =========================================================
   const checkSubscription = async (userId) => {
     try {
@@ -59,9 +59,8 @@ export default function Subscription() {
         .from('subscriptions')
         .select('*')
         .eq('user_id', userId)
-        // Precisamos verificar se o status é válido (ex: active, trailing, paid)
-        // Ajuste conforme o que seu webhook salva. Geralmente é 'active'.
-        .eq('status', 'active') 
+        // MUDANÇA AQUI: Aceita 'active', 'canceling' (cancelado mas com dias sobrando) e 'trialing'
+        .in('status', ['active', 'canceling', 'trialing']) 
         .maybeSingle();
 
       if (error) {
@@ -208,6 +207,12 @@ export default function Subscription() {
   // 4. CANCELAMENTO
   // =========================================================
   const handleCancel = async () => {
+    // Se já estiver agendado para cancelar, avisamos e não fazemos nada
+    if (subscription.status === 'canceling') {
+        alert("Seu cancelamento já está agendado. Você pode continuar usando até o fim do período.");
+        return;
+    }
+
     if (!confirm("Tem certeza que deseja cancelar sua assinatura?")) return;
     
     setLoading(true);
@@ -221,7 +226,8 @@ export default function Subscription() {
       });
 
       if (response.ok) {
-        alert("Assinatura cancelada. O acesso continuará até o fim do período.");
+        const data = await response.json();
+        alert(data.message || "Assinatura cancelada.");
         window.location.reload();
       } else {
         const err = await response.json();
@@ -248,7 +254,7 @@ export default function Subscription() {
     );
   }
 
-  // >>> CASO 1: USUÁRIO JÁ É ASSINANTE <<<
+  // >>> CASO 1: USUÁRIO JÁ É ASSINANTE (Ativo ou Cancelando) <<<
   if (subscription && !isUpgrading) {
     // Mapeia o nome do plano baseado no ID salvo no banco
     const planKey = subscription.plan_type === 'starter' ? 'starter' : 
@@ -269,8 +275,19 @@ export default function Subscription() {
               <div>
                 <div className="flex items-center gap-3 mb-2">
                   <h2 className="text-2xl font-bold text-gray-900">Plano {currentPlanName}</h2>
-                  <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide">Ativo</span>
+                  
+                  {/* MUDANÇA VISUAL AQUI: Etiqueta diferente se estiver cancelando */}
+                  {subscription.status === 'canceling' ? (
+                      <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide border border-orange-200">
+                        Cancelamento Agendado
+                      </span>
+                  ) : (
+                      <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide">
+                        Ativo
+                      </span>
+                  )}
                 </div>
+
                 <p className="text-gray-500 text-sm">
                   Gerenciado via {providerName}
                 </p>
@@ -279,9 +296,15 @@ export default function Subscription() {
                         Última atualização: {new Date(subscription.updated_at).toLocaleDateString()}
                     </p>
                 )}
+                
+                {subscription.status === 'canceling' && (
+                    <p className="text-xs text-orange-600 mt-2 font-medium">
+                        Seu acesso continua liberado até o fim do período atual.
+                    </p>
+                )}
               </div>
 
-              {isStarter ? (
+              {isStarter && subscription.status !== 'canceling' ? (
                 <button 
                   onClick={() => { setIsUpgrading(true); setSelectedPlanId('pro'); }}
                   className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-8 py-3 rounded-xl font-bold transition shadow-lg animate-pulse transform hover:scale-105 flex flex-col items-center"
@@ -291,7 +314,7 @@ export default function Subscription() {
                 </button>
               ) : (
                 <div className="text-sm font-medium text-blue-600 bg-blue-50 px-4 py-2 rounded-lg border border-blue-100">
-                  Você já tem o melhor plano! 🚀
+                  {subscription.status === 'canceling' ? 'Assinatura encerrada.' : 'Você já tem o melhor plano! 🚀'}
                 </div>
               )}
             </div>
@@ -300,9 +323,13 @@ export default function Subscription() {
 
             <div className="flex justify-between items-center bg-gray-50 p-4 rounded-lg">
                <span className="text-xs text-gray-400 font-mono">ID: {subscription.id.slice(0,8)}...</span>
-               <button onClick={handleCancel} disabled={loading} className="text-red-500 hover:text-red-700 hover:bg-red-50 px-4 py-2 rounded-lg text-sm font-medium transition">
-                 {loading ? "Processando..." : "Cancelar Assinatura"}
-               </button>
+               
+               {/* Esconde botão de cancelar se já estiver cancelando */}
+               {subscription.status !== 'canceling' && (
+                   <button onClick={handleCancel} disabled={loading} className="text-red-500 hover:text-red-700 hover:bg-red-50 px-4 py-2 rounded-lg text-sm font-medium transition">
+                     {loading ? "Processando..." : "Cancelar Assinatura"}
+                   </button>
+               )}
             </div>
           </div>
         </div>
