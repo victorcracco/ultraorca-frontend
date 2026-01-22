@@ -5,20 +5,20 @@ export async function getUserPlan() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return 'free';
 
-  // 1. Prioridade: Busca assinatura ATIVA na tabela subscriptions
+  // 1. Prioridade: Busca assinatura VÁLIDA na tabela subscriptions
   const { data: sub } = await supabase
     .from('subscriptions')
     .select('plan_type, status')
     .eq('user_id', user.id)
-    .eq('status', 'active')
-    .single();
+    // MUDANÇA CRÍTICA AQUI: Aceita 'active', 'canceling' (cancelado mas no prazo) e 'trialing'
+    .in('status', ['active', 'canceling', 'trialing']) 
+    .maybeSingle(); // maybeSingle evita erro no console se não tiver assinatura
 
   if (sub && sub.plan_type) {
     return sub.plan_type; // Retorna 'starter', 'pro' ou 'annual'
   }
 
-  // 2. Fallback: Se não tiver assinatura ativa, verifica se foi setado manualmente no profile
-  // (Útil se você der um plano manual para alguém editando o banco)
+  // 2. Fallback: Se não tiver assinatura válida, verifica se foi setado manualmente no profile
   const { data: profile } = await supabase
     .from('profiles')
     .select('plan_type')
@@ -33,23 +33,23 @@ export async function checkPlanLimit() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { allowed: false, reason: "login_required" };
 
-  // Usa a mesma função para garantir consistência
+  // Usa a função corrigida acima para pegar o plano
   const plan = await getUserPlan();
 
-  // 1. PRO ou ANUAL -> Liberado
+  // 1. PRO ou ANUAL -> Liberado (Infinito)
   if (plan === 'pro' || plan === 'annual') {
     return { allowed: true, plan };
   }
 
   // 2. INICIANTE (Starter) -> Limite 30/mês
   if (plan === 'starter') {
-    // Conta orçamentos deste mês
+    // Tenta usar RPC para contar orçamentos deste mês
     const { data: countThisMonth, error } = await supabase.rpc('count_budgets_this_month', { 
       user_uuid: user.id 
     });
 
     if (error) {
-      // Se a função RPC não existir, faz contagem simples manual (fallback de segurança)
+      // Fallback: Se a função RPC não existir, faz contagem manual
       const startOfMonth = new Date();
       startOfMonth.setDate(1);
       startOfMonth.setHours(0,0,0,0);
