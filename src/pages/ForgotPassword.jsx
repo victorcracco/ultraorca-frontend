@@ -1,23 +1,47 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { supabase } from "../services/supabase";
 import { Link } from "react-router-dom";
+import ReCAPTCHA from "react-google-recaptcha";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState(null);
+  
+  // Referência para resetar o captcha se der erro
+  const captchaRef = useRef(null);
 
   const handleReset = async (e) => {
     e.preventDefault();
+    
+    if (!captchaToken) {
+      alert("Por favor, confirme que você não é um robô.");
+      return;
+    }
+
     setLoading(true);
     
-    // O trque é o redirectTo apontando para a rota que criaremos a seguir
+    // Passamos o captchaToken para o Supabase
+    // Isso garante segurança extra se você ativar 'Enable Captcha' no painel do Supabase
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: 'https://www.ultraorca.com.br/update-password',
+      captchaToken: captchaToken
     });
 
     setLoading(false);
-    if (error) alert("Erro: " + error.message);
-    else alert("Verifique seu e-mail! Enviamos um link de recuperação.");
+    
+    // Reseta o captcha para obrigar validação se tentar de novo
+    if (captchaRef.current) captchaRef.current.reset();
+    setCaptchaToken(null);
+
+    if (error) {
+        // Tratamento para evitar dar dicas se o email não existe (Segurança)
+        // Mas se for erro de captcha, o Supabase avisa
+        alert("Erro: " + error.message);
+    } else {
+        alert("Se este e-mail estiver cadastrado, você receberá um link em instantes.");
+        setEmail(""); // Limpa o campo
+    }
   };
 
   return (
@@ -30,14 +54,31 @@ export default function ForgotPassword() {
           <input 
             type="email" 
             placeholder="seu@email.com" 
-            className="w-full p-3 border rounded-lg"
+            className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
             value={email} onChange={e => setEmail(e.target.value)} required
           />
-          <button disabled={loading} className="w-full bg-blue-600 text-white p-3 rounded-lg font-bold hover:bg-blue-700">
+          
+          {/* ÁREA DO RECAPTCHA */}
+          <div className="flex justify-center">
+            <ReCAPTCHA
+                ref={captchaRef}
+                sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
+                onChange={(token) => setCaptchaToken(token)}
+            />
+          </div>
+
+          <button 
+            disabled={loading || !captchaToken} 
+            className={`w-full p-3 rounded-lg font-bold text-white transition ${
+                loading || !captchaToken 
+                ? "bg-gray-400 cursor-not-allowed" 
+                : "bg-blue-600 hover:bg-blue-700"
+            }`}
+          >
             {loading ? "Enviando..." : "Enviar Link"}
           </button>
         </form>
-        <Link to="/" className="block text-center mt-4 text-sm text-gray-500 hover:underline">Voltar ao Login</Link>
+        <Link to="/login" className="block text-center mt-4 text-sm text-gray-500 hover:underline">Voltar ao Login</Link>
       </div>
     </div>
   );
