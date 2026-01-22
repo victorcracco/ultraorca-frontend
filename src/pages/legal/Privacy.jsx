@@ -32,17 +32,17 @@ export default function Privacy() {
 
           <h3 className="text-xl font-semibold text-gray-800 mt-6">2. Dados Financeiros e Sensíveis</h3>
           <p className="bg-green-50 p-3 border-l-4 border-green-500 text-sm">
-            <strong>Nós NÃO armazenamos dados do seu cartão de crédito.</strong>
+            <strong>Nós NÃO armazenamos dados completos do seu cartão de crédito.</strong>
           </p>
           <p>
-            Para processar pagamentos, utilizamos o gateway seguro <strong>Asaas (Asaas Gestão Financeira Instituição de Pagamento S.A.)</strong>. 
-            Quando você assina um plano, seus dados de pagamento são enviados diretamente e de forma criptografada para o Asaas. 
-            O {APP_NAME} recebe apenas a confirmação de que o pagamento foi realizado.
+            Para processar pagamentos, utilizamos gateways seguros de nível mundial: <strong>Stripe</strong> (para cartões) e <strong>Asaas</strong> (para PIX/Boletos).
+            Quando você assina um plano, seus dados de pagamento são enviados diretamente e de forma criptografada para estes parceiros.
+            O {APP_NAME} recebe apenas a confirmação de que o pagamento foi realizado e tokens de segurança para renovação.
           </p>
 
           <h3 className="text-xl font-semibold text-gray-800 mt-6">3. Uso das Informações</h3>
           <p>
-            Utilizamos seus dados para manter o serviço funcionando, liberar seu acesso após o pagamento e prestar suporte técnico.
+            Utilizamos seus dados para manter o serviço funcionando, liberar seu acesso após o pagamento, enviar notificações de renovação e prestar suporte técnico.
           </p>
 
           <h3 className="text-xl font-semibold text-gray-800 mt-6">4. Compartilhamento</h3>
@@ -50,8 +50,8 @@ export default function Privacy() {
             Seus dados pessoais nunca são vendidos. Compartilhamos estritamente o necessário com:
           </p>
           <ul className="list-disc pl-5 space-y-2">
-            <li><strong>Asaas:</strong> Para processamento de boletos, PIX e cartões de crédito.</li>
-            <li><strong>Infraestrutura:</strong> Servidores de hospedagem seguros para manter o site online.</li>
+            <li><strong>Processadores de Pagamento:</strong> Stripe e Asaas, para viabilizar as cobranças.</li>
+            <li><strong>Infraestrutura:</strong> Servidores de hospedagem seguros (como Vercel e Supabase) para manter o site online.</li>
           </ul>
 
           <h3 className="text-xl font-semibold text-gray-800 mt-6">5. Seus Direitos e Exclusão</h3>

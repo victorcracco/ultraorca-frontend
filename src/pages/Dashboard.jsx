@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { getBudgets, deleteBudget } from "../services/budgetService";
 import { supabase } from "../services/supabase";
+import Confetti from 'react-confetti'; // <--- EFEITO DE FESTA
 
 // Import do driver.js
 import { driver } from "driver.js";
@@ -13,12 +14,27 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   
-  // --- NOVO: ESTADO PARA SELEÇÃO EM MASSA ---
   const [selectedIds, setSelectedIds] = useState([]);
+  
+  // Confetes
+  const [searchParams] = useSearchParams();
+  const [showConfetti, setShowConfetti] = useState(false);
   
   const navigate = useNavigate();
 
-  // --- TUTORIAL (Mantido igual) ---
+  // --- EFEITO: Confete Pós-Pagamento ---
+  useEffect(() => {
+    const paymentStatus = searchParams.get("payment");
+    if (paymentStatus === "success") {
+      setShowConfetti(true);
+      // Remove o confete depois de 8 segundos
+      setTimeout(() => setShowConfetti(false), 8000);
+      // Limpa a URL para ficar limpa
+      window.history.replaceState({}, document.title, "/app");
+    }
+  }, [searchParams]);
+
+  // --- TUTORIAL ---
   const startTutorial = () => {
     const driverObj = driver({
       showProgress: true,
@@ -45,6 +61,7 @@ export default function Dashboard() {
     if (!hasSeenTutorial) setTimeout(() => startTutorial(), 1000);
   }, []);
 
+  // --- CARREGAMENTO DE DADOS ---
   useEffect(() => {
     async function loadData() {
       const { data: { user } } = await supabase.auth.getUser();
@@ -65,10 +82,9 @@ export default function Dashboard() {
     setLoading(false);
   }
 
-  // --- LÓGICA DE SELEÇÃO ---
+  // --- SELEÇÃO ---
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      // Seleciona todos os visíveis no filtro atual
       const allIds = filteredBudgets.map(b => b.id);
       setSelectedIds(allIds);
     } else {
@@ -84,13 +100,12 @@ export default function Dashboard() {
     }
   };
 
-  // --- EXCLUSÃO INDIVIDUAL ---
+  // --- EXCLUSÃO ---
   const handleDelete = async (id) => {
     if (confirm("Tem certeza que deseja excluir este orçamento?")) {
       try {
         await deleteBudget(id);
         setBudgets(budgets.filter((b) => b.id !== id));
-        // Remove da seleção se estiver lá
         setSelectedIds(selectedIds.filter(itemId => itemId !== id));
       } catch (error) {
         alert("Erro ao excluir.");
@@ -98,19 +113,15 @@ export default function Dashboard() {
     }
   };
 
-  // --- EXCLUSÃO EM MASSA ---
   const handleBulkDelete = async () => {
-    if (!confirm(`Tem certeza que deseja excluir ${selectedIds.length} orçamentos selecionados? Essa ação não pode ser desfeita.`)) return;
+    if (!confirm(`Tem certeza que deseja excluir ${selectedIds.length} orçamentos?`)) return;
 
     setLoading(true);
     try {
-      // Deleta um por um (ou você poderia criar uma função no service que aceita array)
       await Promise.all(selectedIds.map(id => deleteBudget(id)));
-      
-      // Atualiza a lista local removendo os deletados
       setBudgets(budgets.filter(b => !selectedIds.includes(b.id)));
-      setSelectedIds([]); // Limpa seleção
-      alert("Orçamentos excluídos com sucesso!");
+      setSelectedIds([]);
+      alert("Orçamentos excluídos!");
     } catch (error) {
       console.error(error);
       alert("Erro ao excluir alguns itens.");
@@ -133,6 +144,9 @@ export default function Dashboard() {
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-8 pb-24">
       
+      {/* CONFETES DA VITÓRIA (Só renderiza se showConfetti for true) */}
+      {showConfetti && <Confetti recycle={false} numberOfPieces={500} />}
+
       {/* CARD DE BOAS VINDAS */}
       <div id="welcome-card" className="relative bg-gradient-to-r from-blue-600 to-indigo-700 rounded-3xl p-8 md:p-12 text-white shadow-xl overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
@@ -176,7 +190,7 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* BARRA DE AÇÃO EM MASSA FLUTUANTE */}
+      {/* BARRA FLUTUANTE DE AÇÃO EM MASSA */}
       {selectedIds.length > 0 && (
         <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-6 z-50 animate-bounce-in">
             <div className="font-bold flex items-center gap-2">
@@ -191,7 +205,7 @@ export default function Dashboard() {
                 className="text-red-400 hover:text-red-300 font-bold flex items-center gap-2 transition"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                Excluir Todos
+                Excluir
             </button>
             <button onClick={() => setSelectedIds([])} className="text-gray-400 hover:text-white">Cancelar</button>
         </div>
@@ -237,7 +251,6 @@ export default function Dashboard() {
             <table className="w-full text-left">
               <thead className="bg-gray-50 text-gray-600 text-sm uppercase">
                 <tr>
-                  {/* CHECKBOX SELECIONAR TUDO */}
                   <th className="p-4 pl-6 w-10">
                     <input 
                         type="checkbox" 
@@ -255,7 +268,6 @@ export default function Dashboard() {
               <tbody className="divide-y divide-gray-100">
                 {filteredBudgets.map((b) => (
                   <tr key={b.id} className={`hover:bg-gray-50 transition group ${selectedIds.includes(b.id) ? 'bg-blue-50' : ''}`}>
-                    {/* CHECKBOX INDIVIDUAL */}
                     <td className="p-4 pl-6">
                         <input 
                             type="checkbox" 
