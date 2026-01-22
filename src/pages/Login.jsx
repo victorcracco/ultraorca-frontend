@@ -1,31 +1,49 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { supabase } from "../services/supabase";
+import ReCAPTCHA from "react-google-recaptcha"; // <--- IMPORT
 
 export default function Login() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  
+  // Captcha
+  const [captchaToken, setCaptchaToken] = useState(null);
+  const captchaRef = useRef(null);
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    
+    // Verifica Captcha
+    if (!captchaToken) {
+        alert("Confirme que você não é um robô.");
+        return;
+    }
+
     setLoading(true);
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
+        options: { captchaToken } // Envia token para Supabase (Opcional, mas bom)
       });
 
       if (error) throw error;
 
-      navigate("/app"); // Login ok, vai pro app
+      navigate("/app"); 
       
     } catch (error) {
       console.error("Erro login:", error);
       alert("E-mail ou senha incorretos. Verifique seus dados.");
+      
+      // Reseta o captcha se errar a senha, para evitar brute-force
+      if (captchaRef.current) captchaRef.current.reset();
+      setCaptchaToken(null);
+      
     } finally {
       setLoading(false);
     }
@@ -51,7 +69,6 @@ export default function Login() {
         </div>
 
         <div className="max-w-md w-full mx-auto mt-10">
-          {/* Logo */}
           <div className="mb-10">
             <Link to="/" className="text-2xl font-extrabold tracking-tighter text-blue-900 flex items-center gap-2">
               <span className="text-3xl">🚀</span> UltraOrça
@@ -77,7 +94,6 @@ export default function Login() {
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="block text-sm font-bold text-gray-700">Senha</label>
-                {/* --- MUDANÇA AQUI: Link real para a página de recuperação --- */}
                 <Link to="/forgot-password" className="text-xs font-semibold text-blue-600 hover:underline">
                   Esqueceu a senha?
                 </Link>
@@ -92,10 +108,19 @@ export default function Login() {
               />
             </div>
 
+            {/* --- RECAPTCHA AQUI --- */}
+            <div className="flex justify-center">
+                <ReCAPTCHA
+                    ref={captchaRef}
+                    sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
+                    onChange={(token) => setCaptchaToken(token)}
+                />
+            </div>
+
             <button
               type="submit"
-              disabled={loading}
-              className={`w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition shadow-lg hover:shadow-blue-200 flex justify-center items-center gap-2 transform active:scale-[0.98] ${loading ? "opacity-70 cursor-not-allowed" : ""}`}
+              disabled={loading || !captchaToken} // Bloqueia sem captcha
+              className={`w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition shadow-lg hover:shadow-blue-200 flex justify-center items-center gap-2 transform active:scale-[0.98] ${loading || !captchaToken ? "opacity-70 cursor-not-allowed bg-gray-400" : ""}`}
             >
               {loading ? (
                  <>
@@ -118,9 +143,7 @@ export default function Login() {
         </div>
       </div>
 
-      {/* --- LADO DIREITO: VISUAL --- */}
       <div className="hidden lg:flex w-1/2 bg-gradient-to-br from-slate-900 to-blue-900 relative overflow-hidden items-center justify-center p-12">
-        {/* Elementos de Fundo */}
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
         <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500 rounded-full blur-3xl opacity-20 -translate-y-1/2 translate-x-1/2"></div>
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-purple-500 rounded-full blur-3xl opacity-20 translate-y-1/2 -translate-x-1/2"></div>

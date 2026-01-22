@@ -1,12 +1,17 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react"; // <--- 1. Adicionado useRef
 import { Link, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { supabase } from "../services/supabase";
+import ReCAPTCHA from "react-google-recaptcha"; // <--- 2. Import do ReCAPTCHA
 
 export default function Register() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   
+  // --- NOVO: Estado do Captcha ---
+  const [captchaToken, setCaptchaToken] = useState(null);
+  const captchaRef = useRef(null);
+
   // Estado para a Logo
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
@@ -37,6 +42,12 @@ export default function Register() {
   const handleRegister = async (e) => {
     e.preventDefault();
 
+    // --- NOVO: Validação do Captcha ---
+    if (!captchaToken) {
+        alert("Por favor, confirme que você não é um robô.");
+        return;
+    }
+
     // 1. Validação de Senha (Double Check)
     if (formData.password !== formData.confirmPassword) {
       alert("As senhas não conferem. Por favor, digite novamente.");
@@ -51,6 +62,7 @@ export default function Register() {
         email: formData.email,
         password: formData.password,
         options: {
+          captchaToken: captchaToken, // <--- Envia o token para o Supabase
           // Salvamos tudo no metadata para facilitar
           data: {
             full_name: formData.personalName,   // Nome do usuário
@@ -94,6 +106,11 @@ export default function Register() {
     } catch (error) {
       console.error("Erro no cadastro:", error);
       alert(error.message || "Erro ao criar conta. Tente novamente.");
+      
+      // Reseta o captcha se der erro para o usuário tentar de novo
+      if (captchaRef.current) captchaRef.current.reset();
+      setCaptchaToken(null);
+
     } finally {
       setLoading(false);
     }
@@ -244,16 +261,25 @@ export default function Register() {
               </div>
             </div>
 
+            {/* --- NOVO: RECAPTCHA --- */}
+            <div className="flex justify-center mt-4">
+                <ReCAPTCHA
+                    ref={captchaRef}
+                    sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
+                    onChange={(token) => setCaptchaToken(token)}
+                />
+            </div>
+
             <button
               type="submit"
-              disabled={loading}
-              className={`w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition shadow-lg mt-4 flex justify-center items-center gap-2 transform active:scale-[0.98] ${loading ? "opacity-70 cursor-not-allowed" : ""}`}
+              disabled={loading || !captchaToken} // Trava se não tiver token
+              className={`w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition shadow-lg mt-4 flex justify-center items-center gap-2 transform active:scale-[0.98] ${loading || !captchaToken ? "opacity-70 cursor-not-allowed bg-gray-400" : ""}`}
             >
               {loading ? (
                 <>
                   <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
-                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
                   </svg>
                   <span>Criando cadastro...</span>
                 </>
