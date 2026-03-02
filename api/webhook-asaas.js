@@ -1,46 +1,65 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
+/**
+ * C3 FIX: Valida o token de autenticação do Asaas antes de processar qualquer evento.
+ * Configure o mesmo token em: Asaas Dashboard > Integrações > Webhooks > Access Token.
+ * C4 FIX (parcial): o userId vem do campo externalReference que nós mesmos gravamos
+ * no momento da criação da assinatura — não vem de input do usuário.
+ */
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
 
+  // Valida o token de autenticação enviado pelo Asaas
+  const asaasToken = req.headers["asaas-access-token"];
+  if (!asaasToken || asaasToken !== process.env.ASAAS_WEBHOOK_TOKEN) {
+    console.warn("Webhook Asaas: token inválido ou ausente.");
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   const { event, payment } = req.body;
-  
-  const eventosDeSucesso = ['PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'];
+
+  const eventosDeSucesso = ["PAYMENT_CONFIRMED", "PAYMENT_RECEIVED"];
 
   if (eventosDeSucesso.includes(event)) {
     const userId = payment.externalReference;
     const subscriptionId = payment.subscription;
-    
-    let planType = 'pro';
-    if (payment.description && payment.description.toLowerCase().includes('starter')) planType = 'starter';
-    if (payment.description && payment.description.toLowerCase().includes('anual')) planType = 'annual';
+
+    let planType = "pro";
+    if (payment.description && payment.description.toLowerCase().includes("starter"))
+      planType = "starter";
+    if (payment.description && payment.description.toLowerCase().includes("anual"))
+      planType = "annual";
 
     if (userId) {
-      console.log(`💠 Pagamento Asaas confirmado para User: ${userId}`);
-
-      // ATUALIZAÇÃO: Usando 'subscription_id' em vez de 'external_id'
       const { error } = await supabase
-        .from('subscriptions')
-        .upsert({
-          user_id: userId,
-          status: 'active',
-          provider: 'asaas',
-          subscription_id: subscriptionId, // <--- NOME CORRIGIDO AQUI
-          plan_type: planType,
-          updated_at: new Date()
-        }, { onConflict: 'user_id' });
+        .from("subscriptions")
+        .upsert(
+          {
+            user_id: userId,
+            status: "active",
+            provider: "asaas",
+            subscription_id: subscriptionId,
+            plan_type: planType,
+            updated_at: new Date(),
+          },
+          { onConflict: "user_id" }
+        );
 
-        if (error) console.error("Erro Supabase Asaas:", error);
+      if (error) console.error("Erro Supabase Asaas:", error);
     }
-  } 
-  
-  else if (event === 'PAYMENT_OVERDUE') {
-     const userId = payment.externalReference;
-     if (userId) {
-         await supabase.from('subscriptions').update({ status: 'past_due' }).eq('user_id', userId);
-     }
+  } else if (event === "PAYMENT_OVERDUE") {
+    const userId = payment.externalReference;
+    if (userId) {
+      await supabase
+        .from("subscriptions")
+        .update({ status: "past_due" })
+        .eq("user_id", userId);
+    }
   }
 
   res.status(200).json({ received: true });

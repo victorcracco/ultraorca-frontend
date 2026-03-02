@@ -2,34 +2,56 @@ import React, { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import { supabase } from "../services/supabase";
 
-// Coloque seu email aqui (tudo minúsculo para garantir)
-const ADMIN_EMAIL = "victorcracco@gmail.com"; 
-
+/**
+ * C2 FIX: Admin verificado por coluna `is_admin` no banco (tabela profiles),
+ * não por e-mail hardcoded no frontend. Garante que a verificação não pode ser
+ * bypassada inspecionando o bundle JavaScript.
+ *
+ * Para definir um admin: UPDATE profiles SET is_admin = true WHERE id = '<user_id>';
+ */
 export default function AdminRoute() {
   const [isAdmin, setIsAdmin] = useState(null);
 
   useEffect(() => {
-    async function checkUser() {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      console.log("--- DEBUG ADMIN ---");
-      console.log("Email esperado:", ADMIN_EMAIL);
-      console.log("Usuário logado:", user?.email);
+    let isMounted = true;
 
-      // Verificação mais robusta (ignora maiúsculas/minúsculas e espaços)
-      if (user && user.email.trim().toLowerCase() === ADMIN_EMAIL.trim().toLowerCase()) {
-        console.log("✅ Acesso PERMITIDO");
-        setIsAdmin(true);
-      } else {
-        console.log("❌ Acesso NEGADO");
-        setIsAdmin(false);
+    async function checkAdmin() {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!user) {
+          if (isMounted) setIsAdmin(false);
+          return;
+        }
+
+        const { data: profile, error } = await supabase
+          .from("profiles")
+          .select("is_admin")
+          .eq("id", user.id)
+          .single();
+
+        if (isMounted) {
+          setIsAdmin(!error && profile?.is_admin === true);
+        }
+      } catch {
+        if (isMounted) setIsAdmin(false);
       }
     }
-    checkUser();
+
+    checkAdmin();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   if (isAdmin === null) {
-    return <div className="p-10 text-center">Verificando permissões... (Olhe o Console F12)</div>;
+    return (
+      <div className="p-10 text-center text-gray-500">
+        Verificando permissões...
+      </div>
+    );
   }
 
   return isAdmin ? <Outlet /> : <Navigate to="/app" />;

@@ -1,7 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 
-// ⚠️ SUBSTITUA PELOS SEUS DADOS REAIS DO SUPABASE
-const supabaseUrl = 'https://ixaggpnuhtlcnrxlbuiy.supabase.co'; 
-const supabaseKey = 'sb_publishable_QqQPSjGQo3RUSaZjT9lxSw_gYMmWwlS';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error(
+    'Variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY não configuradas.'
+  );
+}
 
 export const supabase = createClient(supabaseUrl, supabaseKey);

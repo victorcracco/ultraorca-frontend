@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react"; // <--- 1. Adicionado useRef
+import React, { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { supabase } from "../services/supabase";
@@ -7,7 +7,7 @@ import ReCAPTCHA from "react-google-recaptcha"; // <--- 2. Import do ReCAPTCHA
 export default function Register() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  
+
   // --- NOVO: Estado do Captcha ---
   const [captchaToken, setCaptchaToken] = useState(null);
   const captchaRef = useRef(null);
@@ -34,18 +34,30 @@ export default function Register() {
   const handleLogoChange = (e) => {
     const file = e.target.files[0];
     if (file) {
+      // M9 FIX: revoga a URL anterior antes de criar uma nova (evita memory leak)
+      if (logoPreview) URL.revokeObjectURL(logoPreview);
       setLogoFile(file);
       setLogoPreview(URL.createObjectURL(file));
     }
   };
+
+  // M9 FIX: revoga a ObjectURL ao desmontar o componente
+  useEffect(() => {
+    return () => {
+      if (logoPreview && logoPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(logoPreview);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleRegister = async (e) => {
     e.preventDefault();
 
     // --- NOVO: Validação do Captcha ---
     if (!captchaToken) {
-        alert("Por favor, confirme que você não é um robô.");
-        return;
+      alert("Por favor, confirme que você não é um robô.");
+      return;
     }
 
     // 1. Validação de Senha (Double Check)
@@ -69,7 +81,7 @@ export default function Register() {
             company_name: formData.companyName, // Nome da empresa
             address: formData.address,          // Endereço
             whatsapp: formData.whatsapp,
-            avatar_url: null 
+            avatar_url: null
           },
         },
       });
@@ -82,7 +94,7 @@ export default function Register() {
       if (userId && logoFile) {
         const fileExt = logoFile.name.split('.').pop();
         const fileName = `${userId}/logo.${fileExt}`;
-        
+
         const { error: uploadError } = await supabase.storage
           .from('company-logos')
           .upload(fileName, logoFile);
@@ -106,7 +118,7 @@ export default function Register() {
     } catch (error) {
       console.error("Erro no cadastro:", error);
       alert(error.message || "Erro ao criar conta. Tente novamente.");
-      
+
       // Reseta o captcha se der erro para o usuário tentar de novo
       if (captchaRef.current) captchaRef.current.reset();
       setCaptchaToken(null);
@@ -124,7 +136,7 @@ export default function Register() {
 
       {/* --- LADO ESQUERDO: FORMULÁRIO --- */}
       <div className="w-full lg:w-1/2 flex flex-col px-8 sm:px-12 lg:px-20 py-8 overflow-y-auto h-screen custom-scrollbar">
-        
+
         {/* Botão Voltar */}
         <div className="mb-6">
           <Link to="/" className="inline-flex items-center text-gray-500 hover:text-blue-600 transition text-sm font-medium gap-1">
@@ -140,7 +152,7 @@ export default function Register() {
           <p className="text-gray-500 mb-8">Preencha para que seus orçamentos já saiam prontos.</p>
 
           <form onSubmit={handleRegister} className="space-y-5">
-            
+
             {/* LOGO */}
             <div className="flex items-center gap-4 mb-6 p-4 bg-gray-50 border border-dashed border-gray-300 rounded-xl">
               <div className="relative w-16 h-16 rounded-full bg-white border border-gray-200 flex items-center justify-center overflow-hidden shrink-0">
@@ -202,7 +214,7 @@ export default function Register() {
 
             {/* CONTATO (Lado a Lado) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-               <div>
+              <div>
                 <label className="block text-xs font-bold text-gray-700 uppercase mb-1">WhatsApp</label>
                 <input
                   type="tel"
@@ -249,11 +261,10 @@ export default function Register() {
                   type="password"
                   name="confirmPassword"
                   required
-                  className={`w-full px-4 py-3 bg-gray-50 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${
-                    formData.confirmPassword && formData.password !== formData.confirmPassword 
-                      ? "border-red-300 focus:ring-red-200" 
+                  className={`w-full px-4 py-3 bg-gray-50 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${formData.confirmPassword && formData.password !== formData.confirmPassword
+                      ? "border-red-300 focus:ring-red-200"
                       : "border-gray-200"
-                  }`}
+                    }`}
                   placeholder="Repita a senha"
                   value={formData.confirmPassword}
                   onChange={handleChange}
@@ -263,11 +274,11 @@ export default function Register() {
 
             {/* --- NOVO: RECAPTCHA --- */}
             <div className="flex justify-center mt-4">
-                <ReCAPTCHA
-                    ref={captchaRef}
-                    sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
-                    onChange={(token) => setCaptchaToken(token)}
-                />
+              <ReCAPTCHA
+                ref={captchaRef}
+                sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
+                onChange={(token) => setCaptchaToken(token)}
+              />
             </div>
 
             <button
@@ -278,8 +289,8 @@ export default function Register() {
               {loading ? (
                 <>
                   <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
                   </svg>
                   <span>Criando cadastro...</span>
                 </>
@@ -300,11 +311,11 @@ export default function Register() {
       <div className="hidden lg:flex w-1/2 bg-gradient-to-br from-blue-900 to-slate-900 relative overflow-hidden items-center justify-center p-12 h-screen sticky top-0">
         <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500 rounded-full blur-3xl opacity-20 -translate-y-1/2 translate-x-1/2"></div>
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-purple-500 rounded-full blur-3xl opacity-20 translate-y-1/2 -translate-x-1/2"></div>
-        
+
         <div className="relative z-10 max-w-lg text-white">
           <div className="mb-8 flex items-center gap-2">
-             <span className="text-4xl">🚀</span>
-             <span className="text-2xl font-bold">UltraOrça</span>
+            <span className="text-4xl">🚀</span>
+            <span className="text-2xl font-bold">UltraOrça</span>
           </div>
           <h2 className="text-4xl font-bold mb-6 leading-tight">
             Tudo pronto para você trabalhar.
@@ -312,15 +323,15 @@ export default function Register() {
           <p className="text-blue-200 text-lg mb-8">
             Ao preencher seus dados ao lado, nós já configuramos o seu modelo de PDF automaticamente. Seu primeiro orçamento sai em menos de 1 minuto.
           </p>
-          
+
           <div className="bg-white/5 backdrop-blur-sm p-6 rounded-2xl border border-white/10">
-             <div className="flex gap-4 items-start">
-                <div className="bg-green-500/20 p-2 rounded-lg text-green-400">🛡️</div>
-                <div>
-                   <h3 className="font-bold text-white">Seus dados estão seguros</h3>
-                   <p className="text-sm text-gray-400 mt-1">Seguimos rigorosos padrões de segurança e privacidade. Você está no controle.</p>
-                </div>
-             </div>
+            <div className="flex gap-4 items-start">
+              <div className="bg-green-500/20 p-2 rounded-lg text-green-400">🛡️</div>
+              <div>
+                <h3 className="font-bold text-white">Seus dados estão seguros</h3>
+                <p className="text-sm text-gray-400 mt-1">Seguimos rigorosos padrões de segurança e privacidade. Você está no controle.</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
