@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate, Link } from "react-router-dom";
 import ProductSelector from "../components/ProductSelector";
-import { getProducts } from "../services/storage";
+import { supabase } from "../services/supabase";
 import { generateBudgetPDF } from "../utils/generateBudgetPDF";
 import { saveBudget, getBudgetById, checkPlanLimit, getUserPlan } from "../services/budgetService";
 
@@ -129,6 +129,23 @@ export default function NewBudget() {
 
     initializePage();
   }, [editId]);
+
+  // Carrega produtos do Supabase (C1 FIX: não usa mais localStorage)
+  useEffect(() => {
+    async function loadProducts() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from("products")
+        .select("id, name, price, type")
+        .eq("user_id", user.id)
+        .order("name", { ascending: true });
+      setProducts(data || []);
+    }
+    loadProducts();
+  }, []);
+
+
 
   // ==================================================================================
   // 2. AUTO-SAVE (Rascunho)
