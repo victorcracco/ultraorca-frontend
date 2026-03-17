@@ -31,8 +31,8 @@ export default async function handler(req, res) {
   try {
     event = stripe.webhooks.constructEvent(buf, sig, webhookSecret);
   } catch (err) {
-    console.error(`Webhook Error: ${err.message}`);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+    console.error("Stripe webhook signature inválida:", err.message);
+    return res.status(400).json({ error: "Webhook inválido." });
   }
 
   if (event.type === "checkout.session.completed" || event.type === "invoice.payment_succeeded") {
@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     const planType = session.metadata?.planType || 'pro';
 
     if (userId) {
-      console.log(`💰 Pagamento Stripe confirmado para User: ${userId}`);
+      console.log("💰 Pagamento Stripe confirmado.");
 
       // ATUALIZAÇÃO: Usando 'subscription_id' em vez de 'external_id'
       const { error } = await supabase

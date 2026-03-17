@@ -30,13 +30,14 @@ export async function getUserPlan() {
 }
 
 // --- VERIFICAÇÃO DE LIMITES ---
-export async function checkPlanLimit() {
+// knownPlan: passa o plano já carregado para evitar query dupla
+export async function checkPlanLimit(knownPlan = null) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { allowed: false, reason: "login_required" };
 
-  const plan = await getUserPlan();
+  const plan = knownPlan || await getUserPlan();
 
   // PRO ou ANUAL -> Liberado (Infinito)
   if (plan === "pro" || plan === "annual") {
@@ -102,39 +103,35 @@ export async function saveBudget(budgetData) {
         client_address: budgetData.clientAddress,
         items: budgetData.items,
         total: budgetData.total,
+        layout: budgetData.layout,
         primary_color: budgetData.primaryColor,
         validity_days: parseInt(budgetData.validityDays),
         updated_at: new Date(),
       })
       .eq("id", budgetData.id)
-      .eq("user_id", user.id); // garante que só o dono pode editar
+      .eq("user_id", user.id);
 
     if (error) throw error;
     return budgetData.id;
   }
 
-  // INSERT — C6: usa MAX(display_id)+1 em subquery atômica via RPC para evitar race condition
-  // Se não tiver a RPC, usa a query sequencial como fallback (seguro para baixo volume)
-  const { data: lastBudget } = await supabase
-    .from("budgets")
-    .select("display_id")
-    .eq("user_id", user.id)
-    .order("display_id", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // INSERT — usa RPC atômica para evitar race condition no display_id
+  const { data: nextDisplayId, error: rpcError } = await supabase
+    .rpc("get_next_display_id", { user_uuid: user.id });
 
-  const nextDisplayId = (lastBudget?.display_id || 0) + 1;
+  const displayId = rpcError ? 1 : (nextDisplayId || 1);
 
   const { data, error } = await supabase
     .from("budgets")
     .insert([
       {
         user_id: user.id,
-        display_id: nextDisplayId,
+        display_id: displayId,
         client_name: budgetData.client,
         client_address: budgetData.clientAddress,
         items: budgetData.items,
         total: budgetData.total,
+        layout: budgetData.layout,
         primary_color: budgetData.primaryColor,
         validity_days: parseInt(budgetData.validityDays),
       },
@@ -181,11 +178,43 @@ export async function deleteBudget(id) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Não autenticado");
-  // P7 FIX: filtro duplo por id + user_id — impede deletar orçamentos de outros usuários
   const { error } = await supabase
     .from("budgets")
     .delete()
     .eq("id", id)
     .eq("user_id", user.id);
   if (error) throw error;
+}
+
+export async function toggleBudgetPublic(id, isPublic) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado");
+  const { error } = await supabase
+    .from("budgets")
+    .update({ is_public: isPublic })
+    .eq("id", id)
+    .eq("user_id", user.id);
+  if (error) throw error;
+}
+
+// Aceita um orçamento públio via RPC (sem autenticação necessária)
+export async function acceptBudget(id) {
+  const { data, error } = await supabase.rpc("accept_budget", { budget_id: id });
+  if (error) throw error;
+  return data; // true se aceitou, false se já estava aceito ou não encontrado
+}
+
+// Busca um orçamento público por ID (sem autenticação)
+// Seleciona apenas as colunas necessárias para exibição — user_id e dados internos nunca são expostos
+export async function getPublicBudget(id) {
+  const { data, error } = await supabase
+    .from("budgets")
+    .select("id, display_id, client_name, client_address, items, total, validity_days, primary_color, created_at, status, is_public")
+    .eq("id", id)
+    .eq("is_public", true)
+    .single();
+  if (error) return null;
+  return data;
 }

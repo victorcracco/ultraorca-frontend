@@ -1,85 +1,61 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "../services/supabase";
+import { useToast } from "../components/Toast";
+import ConfirmModal from "../components/ConfirmModal";
 
 export default function Subscription() {
+  const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(true);
 
   const [userData, setUserData] = useState({ name: "", cpf: "", email: "" });
   const [subscription, setSubscription] = useState(null);
-
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState("pro");
-
-  // Controle do Modal
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
-  // Configuração dos Planos
+  const realtimeChannelRef = useRef(null);
+
   const plans = {
     starter: {
       id: "starter",
       name: "Iniciante",
       price: 19.99,
       period: "/mês",
-      description: "Plano Iniciante",
       features: ["30 orçamentos/mês", "PDF Padrão", "Suporte Básico"],
-      color: "gray"
+      color: "gray",
     },
     pro: {
       id: "pro",
       name: "Profissional",
       price: 29.99,
       period: "/mês",
-      description: "Plano PRO - Ilimitado",
-      features: ["Orçamentos Ilimitados", "Sem marca d'água", "Cadastro de Produtos", "Suporte Prioritário"],
+      features: ["Orçamentos Ilimitados", "Todos os layouts de PDF", "Cadastro de Produtos", "Suporte Prioritário"],
       color: "blue",
-      recommended: true
+      recommended: true,
     },
     annual: {
       id: "annual",
       name: "Anual PRO",
       price: 299.00,
       period: "/ano",
-      description: "Plano Anual",
       features: ["Tudo do PRO", "2 Meses Grátis", "Pagamento Único"],
       color: "green",
-      badge: "Economize R$ 60"
-    }
+      badge: "Economize R$ 60",
+    },
   };
 
-  // M7 FIX: Mapeamento estático para classes do Tailwind (classes dinâmicas são removidas no build)
   const planStyles = {
-    starter: {
-      name: "bg-gray-500",
-      text: "text-gray-700",
-      border: "border-gray-500",
-      badge: "bg-gray-500",
-      check: "text-gray-500",
-      btn: "bg-gray-500"
-    },
-    pro: {
-      name: "bg-blue-500",
-      text: "text-blue-600",
-      border: "border-blue-500",
-      badge: "bg-blue-500",
-      check: "text-blue-500",
-      btn: "bg-blue-600"
-    },
-    annual: {
-      name: "bg-green-500",
-      text: "text-green-600",
-      border: "border-green-500",
-      badge: "bg-green-500",
-      check: "text-green-500",
-      btn: "bg-green-600"
-    },
+    starter: { name: "bg-gray-500", text: "text-gray-700", border: "border-gray-500", badge: "bg-gray-500", check: "text-gray-500", btn: "bg-gray-500" },
+    pro:     { name: "bg-blue-500", text: "text-blue-600", border: "border-blue-500", badge: "bg-blue-500", check: "text-blue-500", btn: "bg-blue-600" },
+    annual:  { name: "bg-green-500", text: "text-green-600", border: "border-green-500", badge: "bg-green-500", check: "text-green-500", btn: "bg-green-600" },
   };
 
-  // M2 FIX: Validação de CPF com dígitos verificadores
   const validateCPF = (cpf) => {
-    const cleaned = cpf.replace(/\D/g, '');
+    const cleaned = cpf.replace(/\D/g, "");
     if (cleaned.length !== 11) return false;
-    if (/^(\d)\1{10}$/.test(cleaned)) return false; // todos iguais
+    if (/^(\d)\1{10}$/.test(cleaned)) return false;
     let sum = 0;
     for (let i = 0; i < 9; i++) sum += parseInt(cleaned[i]) * (10 - i);
     let r = (sum * 10) % 11;
@@ -95,66 +71,58 @@ export default function Subscription() {
   const selectedPlan = plans[selectedPlanId];
 
   // =========================================================
-  // 1. VERIFICAÇÃO DE ASSINATURA (Atualizado)
+  // 1. INICIALIZAÇÃO + REALTIME (substitui polling)
   // =========================================================
-  const checkSubscription = async (userId) => {
-    try {
-      // Usamos .maybeSingle() para evitar erro 406 se não tiver assinatura
-      const { data: subData, error } = await supabase
-        .from('subscriptions')
-        .select('*')
-        .eq('user_id', userId)
-        // MUDANÇA AQUI: Aceita 'active', 'canceling' (cancelado mas com dias sobrando) e 'trialing'
-        .in('status', ['active', 'canceling', 'trialing'])
-        .maybeSingle();
-
-      if (error) {
-        console.warn("Erro ao buscar assinatura:", error.message);
-        return null;
-      }
-
-      if (subData) {
-        setSubscription(subData);
-        return true; // Encontrou e é válida
-      }
-    } catch (err) {
-      console.error("Erro conexão:", err);
-    }
-    return false; // Não encontrou
-  };
-
-  // Efeito de Inicialização + Polling Inteligente
   useEffect(() => {
-    let intervalId;
-    // P6 FIX: useRef para o contador de tentativas (não causa re-render, sem race condition)
-    const attemptsRef = { current: 0 };
+    let userId = null;
 
     async function init() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
+        if (!user) { setCheckingStatus(false); return; }
 
-        if (user) {
-          setUserData(prev => ({
-            ...prev,
-            name: user.user_metadata?.full_name || "",
-            email: user.email
-          }));
+        userId = user.id;
+        setUserData((prev) => ({
+          ...prev,
+          name: user.user_metadata?.full_name || "",
+          email: user.email,
+        }));
 
-          const isActive = await checkSubscription(user.id);
-          setCheckingStatus(false);
+        // Busca assinatura existente
+        const { data: subData } = await supabase
+          .from("subscriptions")
+          .select("*")
+          .eq("user_id", userId)
+          .in("status", ["active", "canceling", "trialing"])
+          .maybeSingle();
 
-          if (!isActive) {
-            intervalId = setInterval(async () => {
-              attemptsRef.current++;
-              const found = await checkSubscription(user.id);
-              if (found || attemptsRef.current > 20) {
-                clearInterval(intervalId);
+        if (subData) setSubscription(subData);
+        setCheckingStatus(false);
+
+        // Realtime: escuta INSERT/UPDATE na tabela subscriptions para este usuário
+        realtimeChannelRef.current = supabase
+          .channel(`sub-status-${userId}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "subscriptions",
+              filter: `user_id=eq.${userId}`,
+            },
+            (payload) => {
+              const updated = payload.new;
+              if (updated && ["active", "canceling", "trialing"].includes(updated.status)) {
+                setSubscription(updated);
+                if (updated.status === "active") {
+                  toast.success("Pagamento confirmado! Bem-vindo ao plano " + (plans[updated.plan_type]?.name || updated.plan_type) + "!");
+                }
+              } else if (updated?.status === "canceled") {
+                setSubscription(null);
               }
-            }, 3000);
-          }
-        } else {
-          setCheckingStatus(false);
-        }
+            }
+          )
+          .subscribe();
       } catch (error) {
         console.error(error);
         setCheckingStatus(false);
@@ -162,24 +130,28 @@ export default function Subscription() {
     }
 
     init();
-    return () => { if (intervalId) clearInterval(intervalId); };
+
+    return () => {
+      if (realtimeChannelRef.current) {
+        supabase.removeChannel(realtimeChannelRef.current);
+      }
+    };
   }, []);
 
   // =========================================================
   // 2. VALIDAÇÃO E MODAL
   // =========================================================
   const handleOpenPaymentModal = () => {
-    if (!userData.name) {
-      alert("Por favor, preencha seu nome completo.");
+    if (!userData.name.trim()) {
+      toast.error("Por favor, preencha seu nome completo.");
       return;
     }
-    // M2 FIX: Valida CPF real com dígitos verificadores antes de prosseguir
     if (!userData.cpf) {
-      alert("Por favor, preencha seu CPF.");
+      toast.error("Por favor, preencha seu CPF.");
       return;
     }
     if (!validateCPF(userData.cpf)) {
-      alert("CPF inválido. Verifique os dígitos e tente novamente.");
+      toast.error("CPF inválido. Verifique os dígitos e tente novamente.");
       return;
     }
     setShowPaymentModal(true);
@@ -199,19 +171,18 @@ export default function Subscription() {
         name: userData.name,
         cpf: userData.cpf,
         planId: selectedPlan.id,
-        isUpgrade: isUpgrading
+        isUpgrade: isUpgrading,
       };
 
-      const endpoint = method === 'stripe' ? '/api/checkout-stripe' : '/api/checkout-asaas';
+      const endpoint = method === "stripe" ? "/api/checkout-stripe" : "/api/checkout-asaas";
 
       const response = await fetch(endpoint, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          // C4 FIX: envia o JWT para o backend validar o usuário
-          'Authorization': `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
 
       const contentType = response.headers.get("content-type");
@@ -222,22 +193,18 @@ export default function Subscription() {
       }
 
       const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Falha ao processar pagamento");
 
-      if (!response.ok) {
-        throw new Error(data.error || "Falha ao processar pagamento");
-      }
-
-      if (method === 'stripe') {
+      if (method === "stripe") {
         if (data.url) window.location.href = data.url;
         else throw new Error("Link do Stripe não gerado.");
-      } else if (method === 'asaas') {
+      } else if (method === "asaas") {
         if (data.invoiceUrl) window.location.href = data.invoiceUrl;
         else throw new Error("Link do boleto/pix não gerado pelo Asaas.");
       }
-
     } catch (error) {
       console.error(error);
-      alert(`Ops! ${error.message}`);
+      toast.error(`Ops! ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -247,48 +214,46 @@ export default function Subscription() {
   // 4. CANCELAMENTO
   // =========================================================
   const handleCancel = async () => {
-    if (subscription.status === 'canceling') {
-      alert("Seu cancelamento já está agendado. Você pode continuar usando até o fim do período.");
+    if (subscription?.status === "canceling") {
+      toast.info("Seu cancelamento já está agendado. Você pode continuar usando até o fim do período.");
       return;
     }
+    setConfirmCancel(true);
+  };
 
-    if (!confirm("Tem certeza que deseja cancelar sua assinatura?")) return;
-
+  const confirmCancelSubscription = async () => {
+    setConfirmCancel(false);
     setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
 
-      const response = await fetch('/api/cancel-subscription', {
-        method: 'POST',
+      const response = await fetch("/api/cancel-subscription", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          // C4 FIX: envia JWT para o backend autenticar o usuário
-          'Authorization': `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({})
+        body: JSON.stringify({}),
       });
 
       if (response.ok) {
         const data = await response.json();
-        alert(data.message || "Assinatura cancelada.");
-        // P5 FIX: atualiza o estado local em vez de forçar reload da página
-        setSubscription(prev => ({ ...prev, status: 'canceling' }));
+        toast.success(data.message || "Assinatura cancelada.");
+        setSubscription((prev) => ({ ...prev, status: "canceling" }));
       } else {
         const err = await response.json();
         throw new Error(err.error || "Erro ao cancelar.");
       }
     } catch (error) {
-      alert(error.message);
+      toast.error(error.message);
     } finally {
       setLoading(false);
     }
   };
 
   // =========================================================
-  // 5. RENDERIZAÇÃO DA TELA
+  // 5. RENDERIZAÇÃO
   // =========================================================
-
-  // Tela de Loading Inicial
   if (checkingStatus) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center">
@@ -298,253 +263,258 @@ export default function Subscription() {
     );
   }
 
-  // >>> CASO 1: USUÁRIO JÁ É ASSINANTE (Ativo ou Cancelando) <<<
+  // CASO 1: JÁ É ASSINANTE
   if (subscription && !isUpgrading) {
-    // Mapeia o nome do plano baseado no ID salvo no banco
-    const planKey = subscription.plan_type === 'starter' ? 'starter' :
-      subscription.plan_type === 'pro' ? 'pro' :
-        subscription.plan_type === 'annual' ? 'annual' : 'starter'; // fallback
-
+    const planKey = ["starter", "pro", "annual"].includes(subscription.plan_type)
+      ? subscription.plan_type
+      : "starter";
     const currentPlanName = plans[planKey]?.name || subscription.plan_type;
-    const isStarter = subscription.plan_type === 'starter';
-    const providerName = subscription.provider === 'stripe' ? 'Cartão de Crédito' : 'Boleto/Pix Asaas';
+    const isStarter = subscription.plan_type === "starter";
+    const providerName = subscription.provider === "stripe" ? "Cartão de Crédito" : "Boleto/Pix Asaas";
 
     return (
-      <div className="max-w-4xl mx-auto py-12 px-4">
-        <h1 className="text-3xl font-bold text-gray-800 mb-8">Minha Assinatura</h1>
-
-        <div className="bg-white rounded-2xl shadow-lg border border-blue-100 overflow-hidden">
-          <div className="p-8">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-              <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <h2 className="text-2xl font-bold text-gray-900">Plano {currentPlanName}</h2>
-
-                  {/* MUDANÇA VISUAL AQUI: Etiqueta diferente se estiver cancelando */}
-                  {subscription.status === 'canceling' ? (
-                    <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide border border-orange-200">
-                      Cancelamento Agendado
-                    </span>
-                  ) : (
-                    <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide">
-                      Ativo
-                    </span>
+      <>
+        <ConfirmModal
+          open={confirmCancel}
+          message="Tem certeza que deseja cancelar sua assinatura?"
+          confirmLabel="Cancelar Assinatura"
+          danger
+          onConfirm={confirmCancelSubscription}
+          onCancel={() => setConfirmCancel(false)}
+        />
+        <div className="max-w-4xl mx-auto py-12 px-4">
+          <h1 className="text-3xl font-bold text-gray-800 mb-8">Minha Assinatura</h1>
+          <div className="bg-white rounded-2xl shadow-lg border border-blue-100 overflow-hidden">
+            <div className="p-8">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <h2 className="text-2xl font-bold text-gray-900">Plano {currentPlanName}</h2>
+                    {subscription.status === "canceling" ? (
+                      <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide border border-orange-200">
+                        Cancelamento Agendado
+                      </span>
+                    ) : (
+                      <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide">
+                        Ativo
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-gray-500 text-sm">Gerenciado via {providerName}</p>
+                  {subscription.updated_at && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      Última atualização: {new Date(subscription.updated_at).toLocaleDateString("pt-BR")}
+                    </p>
+                  )}
+                  {subscription.status === "canceling" && (
+                    <p className="text-xs text-orange-600 mt-2 font-medium">
+                      Seu acesso continua liberado até o fim do período atual.
+                    </p>
                   )}
                 </div>
 
-                <p className="text-gray-500 text-sm">
-                  Gerenciado via {providerName}
-                </p>
-                {subscription.updated_at && (
-                  <p className="text-xs text-gray-400 mt-1">
-                    Última atualização: {new Date(subscription.updated_at).toLocaleDateString()}
-                  </p>
-                )}
-
-                {subscription.status === 'canceling' && (
-                  <p className="text-xs text-orange-600 mt-2 font-medium">
-                    Seu acesso continua liberado até o fim do período atual.
-                  </p>
+                {isStarter && subscription.status !== "canceling" ? (
+                  <button
+                    onClick={() => { setIsUpgrading(true); setSelectedPlanId("pro"); }}
+                    className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-8 py-3 rounded-xl font-bold transition shadow-lg animate-pulse transform hover:scale-105 flex flex-col items-center"
+                  >
+                    <span>Fazer Upgrade para PRO</span>
+                    <span className="text-xs font-normal opacity-90">Liberar tudo agora</span>
+                  </button>
+                ) : (
+                  <div className="text-sm font-medium text-blue-600 bg-blue-50 px-4 py-2 rounded-lg border border-blue-100">
+                    {subscription.status === "canceling" ? "Assinatura encerrada em breve." : "Você já tem o melhor plano!"}
+                  </div>
                 )}
               </div>
 
-              {isStarter && subscription.status !== 'canceling' ? (
-                <button
-                  onClick={() => { setIsUpgrading(true); setSelectedPlanId('pro'); }}
-                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-8 py-3 rounded-xl font-bold transition shadow-lg animate-pulse transform hover:scale-105 flex flex-col items-center"
-                >
-                  <span>Fazer Upgrade para PRO 🚀</span>
-                  <span className="text-xs font-normal opacity-90">Liberar tudo agora</span>
-                </button>
-              ) : (
-                <div className="text-sm font-medium text-blue-600 bg-blue-50 px-4 py-2 rounded-lg border border-blue-100">
-                  {subscription.status === 'canceling' ? 'Assinatura encerrada.' : 'Você já tem o melhor plano! 🚀'}
-                </div>
-              )}
-            </div>
+              <hr className="my-8 border-gray-100" />
 
-            <hr className="my-8 border-gray-100" />
-
-            <div className="flex justify-between items-center bg-gray-50 p-4 rounded-lg">
-              <span className="text-xs text-gray-400 font-mono">ID: {subscription.id.slice(0, 8)}...</span>
-
-              {/* Esconde botão de cancelar se já estiver cancelando */}
-              {subscription.status !== 'canceling' && (
-                <button onClick={handleCancel} disabled={loading} className="text-red-500 hover:text-red-700 hover:bg-red-50 px-4 py-2 rounded-lg text-sm font-medium transition">
-                  {loading ? "Processando..." : "Cancelar Assinatura"}
-                </button>
-              )}
+              <div className="flex justify-between items-center bg-gray-50 p-4 rounded-lg">
+                <span className="text-xs text-gray-400 font-mono">ID: {subscription.id?.slice(0, 8)}...</span>
+                {subscription.status !== "canceling" && (
+                  <button
+                    onClick={handleCancel}
+                    disabled={loading}
+                    className="text-red-500 hover:text-red-700 hover:bg-red-50 px-4 py-2 rounded-lg text-sm font-medium transition"
+                  >
+                    {loading ? "Processando..." : "Cancelar Assinatura"}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
-  // >>> CASO 2: TELA DE VENDAS / UPGRADE <<<
+  // CASO 2: TELA DE VENDAS / UPGRADE
   return (
-    <div className="max-w-7xl mx-auto py-12 px-4 relative">
+    <>
+      <ConfirmModal
+        open={confirmCancel}
+        message="Tem certeza que deseja cancelar sua assinatura?"
+        confirmLabel="Cancelar Assinatura"
+        danger
+        onConfirm={confirmCancelSubscription}
+        onCancel={() => setConfirmCancel(false)}
+      />
 
-      {/* MODAL DE PAGAMENTO */}
-      {showPaymentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 relative">
-            <button
-              onClick={() => setShowPaymentModal(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition"
-            >✕</button>
-
-            <h2 className="text-xl font-bold text-gray-800 mb-2">Forma de Pagamento</h2>
-            <p className="text-gray-500 mb-6 text-sm">Escolha como deseja manter sua assinatura.</p>
-
-            <div className="space-y-3">
-              {/* CARTÃO */}
+      <div className="max-w-7xl mx-auto py-12 px-4 relative">
+        {/* MODAL DE PAGAMENTO */}
+        {showPaymentModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 relative">
               <button
-                onClick={() => processPayment('stripe')}
-                disabled={loading}
-                className="w-full border-2 border-blue-600 bg-blue-50 hover:bg-blue-100 p-4 rounded-xl flex items-center justify-between transition group"
-              >
-                <div className="text-left">
-                  <span className="block font-bold text-blue-700">Cartão de Crédito</span>
-                  <span className="text-xs text-blue-600">Liberação imediata + Renovação automática</span>
-                </div>
-                <div className="text-2xl">💳</div>
-              </button>
+                onClick={() => setShowPaymentModal(false)}
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition"
+              >✕</button>
 
-              {/* PIX / BOLETO */}
-              <button
-                onClick={() => processPayment('asaas')}
-                disabled={loading}
-                className="w-full border-2 border-gray-200 hover:border-green-500 hover:bg-green-50 p-4 rounded-xl flex items-center justify-between transition"
-              >
-                <div className="text-left">
-                  <span className="block font-bold text-gray-700">Pix ou Boleto</span>
-                  <span className="text-xs text-gray-500">Enviamos o código mensalmente no Zap</span>
-                </div>
-                <div className="text-2xl">💠</div>
-              </button>
-            </div>
+              <h2 className="text-xl font-bold text-gray-800 mb-2">Forma de Pagamento</h2>
+              <p className="text-gray-500 mb-6 text-sm">Escolha como deseja manter sua assinatura.</p>
 
-            {loading && (
-              <div className="absolute inset-0 bg-white bg-opacity-90 flex flex-col items-center justify-center rounded-2xl z-10">
-                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-3"></div>
-                <p className="text-sm font-bold text-gray-700">Gerando cobrança segura...</p>
+              <div className="space-y-3">
+                <button
+                  onClick={() => processPayment("stripe")}
+                  disabled={loading}
+                  className="w-full border-2 border-blue-600 bg-blue-50 hover:bg-blue-100 p-4 rounded-xl flex items-center justify-between transition group"
+                >
+                  <div className="text-left">
+                    <span className="block font-bold text-blue-700">Cartão de Crédito</span>
+                    <span className="text-xs text-blue-600">Liberação imediata + Renovação automática</span>
+                  </div>
+                  <div className="text-2xl">💳</div>
+                </button>
+
+                <button
+                  onClick={() => processPayment("asaas")}
+                  disabled={loading}
+                  className="w-full border-2 border-gray-200 hover:border-green-500 hover:bg-green-50 p-4 rounded-xl flex items-center justify-between transition"
+                >
+                  <div className="text-left">
+                    <span className="block font-bold text-gray-700">Pix ou Boleto</span>
+                    <span className="text-xs text-gray-500">Código enviado mensalmente</span>
+                  </div>
+                  <div className="text-2xl">💠</div>
+                </button>
               </div>
-            )}
 
-            <p className="text-center text-xs text-gray-400 mt-6 flex justify-center gap-2 items-center">
-              🔒 Pagamento processado em ambiente seguro
-            </p>
-          </div>
-        </div>
-      )}
-
-      {isUpgrading && (
-        <button onClick={() => setIsUpgrading(false)} className="mb-6 flex items-center text-gray-500 hover:text-gray-800 transition font-medium">
-          ← Voltar para minha assinatura
-        </button>
-      )}
-
-      <div className="text-center mb-12">
-        <h1 className="text-4xl font-bold text-gray-900 mb-4">
-          {isUpgrading ? "Evolua seu plano hoje" : "Escolha o plano ideal"}
-        </h1>
-        <p className="text-lg text-gray-500">
-          {isUpgrading ? "Desbloqueie todos os recursos imediatamente." : "Comece grátis ou profissionalize seu negócio agora."}
-        </p>
-      </div>
-
-      <div className="grid md:grid-cols-3 gap-6 mb-12">
-        {Object.values(plans).map((plan) => {
-          if (isUpgrading && plan.id === 'starter') return null;
-          const isSelected = selectedPlanId === plan.id;
-          // M7 FIX: usa estilos estáticos mapeados em vez de classes Tailwind dinâmicas
-          const styles = planStyles[plan.id];
-
-          return (
-            <div
-              key={plan.id}
-              onClick={() => setSelectedPlanId(plan.id)}
-              className={`
-                relative p-8 rounded-2xl cursor-pointer transition-all duration-300 border-2 flex flex-col
-                ${isSelected
-                  ? `${styles.border} bg-white shadow-xl transform scale-105 z-10`
-                  : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-md'
-                }
-              `}
-            >
-              {(plan.recommended || plan.badge) && (
-                <div className={`absolute top-0 right-0 px-3 py-1 rounded-bl-xl rounded-tr-xl text-xs font-bold text-white ${styles.badge}`}>
-                  {plan.badge || 'RECOMENDADO'}
+              {loading && (
+                <div className="absolute inset-0 bg-white bg-opacity-90 flex flex-col items-center justify-center rounded-2xl z-10">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-3"></div>
+                  <p className="text-sm font-bold text-gray-700">Gerando cobrança segura...</p>
                 </div>
               )}
 
-              <h3 className={`text-xl font-bold mb-2 ${styles.text}`}>
-                {plan.name}
-              </h3>
-
-              <div className="flex items-baseline gap-1 mb-6">
-                <span className="text-4xl font-extrabold text-gray-900">
-                  {plan.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </span>
-                <span className="text-xs font-bold text-gray-500 uppercase">{plan.period}</span>
-              </div>
-
-              <ul className="space-y-3 mb-8 flex-grow">
-                {plan.features.map((feature, idx) => (
-                  <li key={idx} className="flex items-center gap-3 text-sm text-gray-600">
-                    <span className={`${styles.check} font-bold`}>✓</span> {feature}
-                  </li>
-                ))}
-              </ul>
-
-              <div className={`w-full py-3 rounded-xl text-center font-bold transition-colors ${isSelected ? `${styles.btn} text-white` : 'bg-gray-100 text-gray-600'}`}>
-                {isSelected ? 'Selecionado' : 'Escolher este'}
-              </div>
+              <p className="text-center text-xs text-gray-400 mt-6">
+                🔒 Pagamento processado em ambiente seguro
+              </p>
             </div>
-          );
-        })}
-      </div>
-
-      <div className="bg-white p-8 rounded-2xl shadow-lg border border-blue-100 max-w-3xl mx-auto">
-        <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-          <span className="bg-blue-100 text-blue-600 w-8 h-8 rounded-full flex items-center justify-center text-sm">✓</span>
-          {isUpgrading ? "Confirmar Upgrade para:" : "Finalizar Assinatura:"}
-          <span className="text-blue-600 ml-1">{selectedPlan?.name}</span>
-        </h3>
-
-        <div className="grid md:grid-cols-2 gap-4 mb-6">
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nome Completo</label>
-            <input
-              type="text"
-              className="w-full border border-gray-300 rounded-lg p-3 outline-none focus:border-blue-500 transition"
-              value={userData.name}
-              onChange={e => setUserData({ ...userData, name: e.target.value })}
-              placeholder="Nome na Nota Fiscal"
-            />
           </div>
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">CPF</label>
-            <input
-              type="text"
-              className="w-full border border-gray-300 rounded-lg p-3 outline-none focus:border-blue-500 transition"
-              value={userData.cpf}
-              onChange={e => setUserData({ ...userData, cpf: e.target.value })}
-              placeholder="000.000.000-00"
-              maxLength={14}
-            />
-          </div>
+        )}
+
+        {isUpgrading && (
+          <button
+            onClick={() => setIsUpgrading(false)}
+            className="mb-6 flex items-center text-gray-500 hover:text-gray-800 transition font-medium"
+          >
+            ← Voltar para minha assinatura
+          </button>
+        )}
+
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">
+            {isUpgrading ? "Evolua seu plano hoje" : "Escolha o plano ideal"}
+          </h1>
+          <p className="text-lg text-gray-500">
+            {isUpgrading ? "Desbloqueie todos os recursos imediatamente." : "Comece grátis ou profissionalize seu negócio agora."}
+          </p>
         </div>
 
-        <button
-          onClick={handleOpenPaymentModal}
-          disabled={loading}
-          className="w-full bg-green-600 hover:bg-green-700 text-white text-lg font-bold py-4 rounded-xl transition shadow-lg hover:shadow-green-200 flex justify-center items-center gap-2"
-        >
-          {loading ? "Carregando..." : "Ir para Pagamento Seguro →"}
-        </button>
+        <div className="grid md:grid-cols-3 gap-6 mb-12">
+          {Object.values(plans).map((plan) => {
+            if (isUpgrading && plan.id === "starter") return null;
+            const isSelected = selectedPlanId === plan.id;
+            const styles = planStyles[plan.id];
+
+            return (
+              <div
+                key={plan.id}
+                onClick={() => setSelectedPlanId(plan.id)}
+                className={`relative p-8 rounded-2xl cursor-pointer transition-all duration-300 border-2 flex flex-col
+                  ${isSelected
+                    ? `${styles.border} bg-white shadow-xl transform scale-105 z-10`
+                    : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-md"
+                  }`}
+              >
+                {(plan.recommended || plan.badge) && (
+                  <div className={`absolute top-0 right-0 px-3 py-1 rounded-bl-xl rounded-tr-xl text-xs font-bold text-white ${styles.badge}`}>
+                    {plan.badge || "RECOMENDADO"}
+                  </div>
+                )}
+                <h3 className={`text-xl font-bold mb-2 ${styles.text}`}>{plan.name}</h3>
+                <div className="flex items-baseline gap-1 mb-6">
+                  <span className="text-4xl font-extrabold text-gray-900">
+                    {plan.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                  </span>
+                  <span className="text-xs font-bold text-gray-500 uppercase">{plan.period}</span>
+                </div>
+                <ul className="space-y-3 mb-8 flex-grow">
+                  {plan.features.map((feature, idx) => (
+                    <li key={idx} className="flex items-center gap-3 text-sm text-gray-600">
+                      <span className={`${styles.check} font-bold`}>✓</span> {feature}
+                    </li>
+                  ))}
+                </ul>
+                <div className={`w-full py-3 rounded-xl text-center font-bold transition-colors ${isSelected ? `${styles.btn} text-white` : "bg-gray-100 text-gray-600"}`}>
+                  {isSelected ? "Selecionado" : "Escolher este"}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="bg-white p-8 rounded-2xl shadow-lg border border-blue-100 max-w-3xl mx-auto">
+          <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+            <span className="bg-blue-100 text-blue-600 w-8 h-8 rounded-full flex items-center justify-center text-sm">✓</span>
+            {isUpgrading ? "Confirmar Upgrade para:" : "Finalizar Assinatura:"}
+            <span className="text-blue-600 ml-1">{selectedPlan?.name}</span>
+          </h3>
+
+          <div className="grid md:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nome Completo</label>
+              <input
+                type="text"
+                className="w-full border border-gray-300 rounded-lg p-3 outline-none focus:border-blue-500 transition"
+                value={userData.name}
+                onChange={(e) => setUserData({ ...userData, name: e.target.value })}
+                placeholder="Nome na Nota Fiscal"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">CPF</label>
+              <input
+                type="text"
+                className="w-full border border-gray-300 rounded-lg p-3 outline-none focus:border-blue-500 transition"
+                value={userData.cpf}
+                onChange={(e) => setUserData({ ...userData, cpf: e.target.value })}
+                placeholder="000.000.000-00"
+                maxLength={14}
+              />
+            </div>
+          </div>
+
+          <button
+            onClick={handleOpenPaymentModal}
+            disabled={loading}
+            className="w-full bg-green-600 hover:bg-green-700 text-white text-lg font-bold py-4 rounded-xl transition shadow-lg hover:shadow-green-200 flex justify-center items-center gap-2"
+          >
+            {loading ? "Carregando..." : "Ir para Pagamento Seguro →"}
+          </button>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

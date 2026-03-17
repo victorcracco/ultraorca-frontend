@@ -2,51 +2,43 @@ import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { getBudgets, deleteBudget } from "../services/budgetService";
 import { supabase } from "../services/supabase";
-import Confetti from 'react-confetti'; // <--- EFEITO DE FESTA
-
-// Import do driver.js
+import { useToast } from "../components/Toast";
+import ConfirmModal from "../components/ConfirmModal";
+import Confetti from "react-confetti";
 import { driver } from "driver.js";
 import "driver.js/dist/driver.css";
 
 export default function Dashboard() {
+  const toast = useToast();
   const [empresa, setEmpresa] = useState("Visitante");
   const [budgets, setBudgets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  
-  const [selectedIds, setSelectedIds] = useState([]);
-  
-  // Confetes
+  const [confirmDelete, setConfirmDelete] = useState(null); // { id, bulk }
   const [searchParams] = useSearchParams();
   const [showConfetti, setShowConfetti] = useState(false);
-  
   const navigate = useNavigate();
 
-  // --- EFEITO: Confete Pós-Pagamento ---
+  // Confete pós-pagamento
   useEffect(() => {
-    const paymentStatus = searchParams.get("payment");
-    if (paymentStatus === "success") {
+    if (searchParams.get("payment") === "success") {
       setShowConfetti(true);
-      // Remove o confete depois de 8 segundos
       setTimeout(() => setShowConfetti(false), 8000);
-      // Limpa a URL para ficar limpa
       window.history.replaceState({}, document.title, "/app");
     }
   }, [searchParams]);
 
-  // --- TUTORIAL ---
+  // Tutorial
   const startTutorial = () => {
     const driverObj = driver({
       showProgress: true,
-      nextBtnText: 'Próximo →',
-      prevBtnText: '← Anterior',
-      doneBtnText: 'Entendi!',
+      nextBtnText: "Próximo →",
+      prevBtnText: "← Anterior",
+      doneBtnText: "Entendi!",
       steps: [
-        { element: '#welcome-card', popover: { title: 'Painel Principal 🚀', description: 'Aqui você tem uma visão geral do seu negócio.' } },
-        { element: '#btn-new-budget', popover: { title: 'Criar Orçamento', description: 'Comece aqui! Crie propostas profissionais em segundos.' } },
-        { element: '#btn-products', popover: { title: 'Seus Produtos', description: 'Cadastre seus serviços recorrentes para ganhar tempo.' } },
-        { element: '#btn-subscription', popover: { title: 'Sua Assinatura', description: 'Gerencie seu plano, faça upgrades ou veja suas faturas.' } },
-        { element: '#budget-list', popover: { title: 'Histórico', description: 'Todos os seus orçamentos salvos ficam aqui para consulta ou edição.' } }
+        { element: "#welcome-card", popover: { title: "Painel Principal", description: "Aqui você tem uma visão geral do seu negócio." } },
+        { element: "#btn-new-budget", popover: { title: "Criar Orçamento", description: "Crie propostas profissionais em segundos." } },
+        { element: "#stats-cards", popover: { title: "Suas Métricas", description: "Acompanhe o volume e valor dos seus orçamentos." } },
+        { element: "#budget-list", popover: { title: "Histórico", description: "Todos os seus orçamentos salvos ficam aqui." } },
       ],
       onDestroyStarted: () => {
         localStorage.setItem("tutorial_v1_completed", "true");
@@ -57,18 +49,16 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    const hasSeenTutorial = localStorage.getItem("tutorial_v1_completed");
-    if (!hasSeenTutorial) setTimeout(() => startTutorial(), 1000);
+    if (!localStorage.getItem("tutorial_v1_completed")) setTimeout(() => startTutorial(), 1000);
   }, []);
 
-  // --- CARREGAMENTO DE DADOS ---
+  // Carregamento
   useEffect(() => {
     async function loadData() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data: profile } = await supabase.from('profiles').select('company_name').eq('id', user.id).single();
-        if (profile?.company_name) setEmpresa(profile.company_name);
-        else setEmpresa(user.user_metadata.full_name || user.email.split("@")[0]);
+        const { data: profile } = await supabase.from("profiles").select("company_name").eq("id", user.id).single();
+        setEmpresa(profile?.company_name || user.user_metadata?.full_name || user.email.split("@")[0]);
       }
       await fetchBudgets();
     }
@@ -82,70 +72,49 @@ export default function Dashboard() {
     setLoading(false);
   }
 
-  // --- SELEÇÃO ---
-  const handleSelectAll = (e) => {
-    if (e.target.checked) {
-      const allIds = filteredBudgets.map(b => b.id);
-      setSelectedIds(allIds);
-    } else {
-      setSelectedIds([]);
-    }
-  };
+  // Métricas calculadas a partir dos dados já carregados
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const budgetsThisMonth = budgets.filter((b) => new Date(b.created_at) >= startOfMonth);
+  const totalValue = budgets.reduce((acc, b) => acc + Number(b.total || 0), 0);
+  const totalValueMonth = budgetsThisMonth.reduce((acc, b) => acc + Number(b.total || 0), 0);
 
-  const handleSelectOne = (id) => {
-    if (selectedIds.includes(id)) {
-      setSelectedIds(selectedIds.filter(itemId => itemId !== id));
-    } else {
-      setSelectedIds([...selectedIds, id]);
-    }
-  };
+  // Exclusão
+  const handleDelete = (id) => setConfirmDelete({ id, bulk: false });
 
-  // --- EXCLUSÃO ---
-  const handleDelete = async (id) => {
-    if (confirm("Tem certeza que deseja excluir este orçamento?")) {
-      try {
-        await deleteBudget(id);
-        setBudgets(budgets.filter((b) => b.id !== id));
-        setSelectedIds(selectedIds.filter(itemId => itemId !== id));
-      } catch (error) {
-        alert("Erro ao excluir.");
-      }
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    if (!confirm(`Tem certeza que deseja excluir ${selectedIds.length} orçamentos?`)) return;
-
+  const executeDelete = async () => {
+    const { id } = confirmDelete;
+    setConfirmDelete(null);
     setLoading(true);
     try {
-      await Promise.all(selectedIds.map(id => deleteBudget(id)));
-      setBudgets(budgets.filter(b => !selectedIds.includes(b.id)));
-      setSelectedIds([]);
-      alert("Orçamentos excluídos!");
-    } catch (error) {
-      console.error(error);
-      alert("Erro ao excluir alguns itens.");
+      await deleteBudget(id);
+      setBudgets((prev) => prev.filter((b) => b.id !== id));
+      toast.success("Orçamento excluído.");
+    } catch {
+      toast.error("Erro ao excluir.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleEdit = (id) => {
-    navigate(`/app/new-budget?id=${id}`);
-  };
-
-  const filteredBudgets = budgets.filter((b) => {
-    const term = searchTerm.toLowerCase();
-    const clientMatch = b.client_name?.toLowerCase().includes(term);
-    const idMatch = String(b.display_id || "").includes(term);
-    return clientMatch || idMatch;
-  });
+  const handleEdit = (id) => navigate(`/app/new-budget?id=${id}`);
 
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-8 pb-24">
-      
-      {/* CONFETES DA VITÓRIA (Só renderiza se showConfetti for true) */}
       {showConfetti && <Confetti recycle={false} numberOfPieces={500} />}
+
+      <ConfirmModal
+        open={!!confirmDelete}
+        message={
+          confirmDelete?.bulk
+            ? `Excluir ${confirmDelete?.ids?.length} orçamentos selecionados?`
+            : "Excluir este orçamento?"
+        }
+        confirmLabel="Excluir"
+        danger
+        onConfirm={executeDelete}
+        onCancel={() => setConfirmDelete(null)}
+      />
 
       {/* CARD DE BOAS VINDAS */}
       <div id="welcome-card" className="relative bg-gradient-to-r from-blue-600 to-indigo-700 rounded-3xl p-8 md:p-12 text-white shadow-xl overflow-hidden">
@@ -190,108 +159,112 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* BARRA FLUTUANTE DE AÇÃO EM MASSA */}
-      {selectedIds.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-6 z-50 animate-bounce-in">
-            <div className="font-bold flex items-center gap-2">
-                <span className="bg-white text-gray-900 w-6 h-6 rounded-full flex items-center justify-center text-xs">
-                    {selectedIds.length}
-                </span>
-                Selecionados
-            </div>
-            <div className="h-6 w-px bg-gray-700"></div>
-            <button 
-                onClick={handleBulkDelete}
-                className="text-red-400 hover:text-red-300 font-bold flex items-center gap-2 transition"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                Excluir
-            </button>
-            <button onClick={() => setSelectedIds([])} className="text-gray-400 hover:text-white">Cancelar</button>
+      {/* CARDS DE MÉTRICAS */}
+      {!loading && budgets.length > 0 && (
+        <div id="stats-cards" className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <StatCard
+            label="Total de Orçamentos"
+            value={budgets.length}
+            icon="📄"
+            color="blue"
+          />
+          <StatCard
+            label="Este Mês"
+            value={budgetsThisMonth.length}
+            icon="📅"
+            color="purple"
+          />
+          <StatCard
+            label="Valor Total"
+            value={totalValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+            icon="💰"
+            color="green"
+            small
+          />
+          <StatCard
+            label="Valor Este Mês"
+            value={totalValueMonth.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+            icon="📈"
+            color="orange"
+            small
+          />
         </div>
       )}
 
-      {/* LISTA DE ORÇAMENTOS */}
+      {/* RECENTES */}
       <div id="budget-list" className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-gray-200 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-          <div className="flex items-center gap-3">
-             <h2 className="text-lg font-bold text-gray-800">Histórico de Orçamentos</h2>
-             <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded-full">{filteredBudgets.length}</span>
-          </div>
-
-          <div className="relative w-full md:w-72">
-             <input 
-               type="text"
-               placeholder="Buscar cliente ou número..."
-               value={searchTerm}
-               onChange={(e) => setSearchTerm(e.target.value)}
-               className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition text-gray-700"
-             />
-             <svg className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-          </div>
+        <div className="p-5 border-b border-gray-100 flex justify-between items-center">
+          <h2 className="text-base font-bold text-gray-800">Orçamentos Recentes</h2>
+          <Link to="/app/budgets" className="text-sm text-blue-600 font-semibold hover:underline flex items-center gap-1">
+            Ver todos
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+          </Link>
         </div>
-        
+
         {loading ? (
-           <div className="flex justify-center p-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>
-        ) : budgets.length === 0 ? (
-          <div className="p-16 text-center text-gray-400 flex flex-col items-center">
-            <div className="bg-gray-50 p-4 rounded-full mb-4">
-               <svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-            </div>
-            <p className="text-lg text-gray-600">Você ainda não criou nenhum orçamento.</p>
-            <Link to="/app/new-budget" className="text-blue-600 font-semibold mt-2 hover:underline">Criar o primeiro agora</Link>
+          <div className="flex justify-center p-10">
+            <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-blue-600"></div>
           </div>
-        ) : filteredBudgets.length === 0 ? (
-           <div className="p-12 text-center text-gray-400">
-               <p>Nenhum orçamento encontrado para "{searchTerm}".</p>
-               <button onClick={() => setSearchTerm("")} className="text-blue-600 text-sm font-semibold mt-2 hover:underline">Limpar busca</button>
-           </div>
+        ) : budgets.length === 0 ? (
+          <div className="p-10 text-center flex flex-col items-center gap-3">
+            <div className="text-4xl">📄</div>
+            <p className="text-gray-600 font-medium">Nenhum orçamento ainda.</p>
+            <Link to="/app/new-budget" className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition">
+              Criar o primeiro agora
+            </Link>
+          </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-gray-50 text-gray-600 text-sm uppercase">
-                <tr>
-                  <th className="p-4 pl-6 w-10">
-                    <input 
-                        type="checkbox" 
-                        className="rounded border-gray-300 w-4 h-4 cursor-pointer"
-                        onChange={handleSelectAll}
-                        checked={filteredBudgets.length > 0 && selectedIds.length === filteredBudgets.length}
-                    />
-                  </th>
-                  <th className="p-4 w-24">#</th> 
-                  <th className="p-4">Cliente</th>
-                  <th className="p-4 text-right">Valor Total</th>
-                  <th className="p-4 text-center">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredBudgets.map((b) => (
-                  <tr key={b.id} className={`hover:bg-gray-50 transition group ${selectedIds.includes(b.id) ? 'bg-blue-50' : ''}`}>
-                    <td className="p-4 pl-6">
-                        <input 
-                            type="checkbox" 
-                            className="rounded border-gray-300 w-4 h-4 cursor-pointer"
-                            checked={selectedIds.includes(b.id)}
-                            onChange={() => handleSelectOne(b.id)}
-                        />
-                    </td>
-                    <td className="p-4 font-mono text-gray-500 font-bold">{b.display_id || "-"}</td>
-                    <td className="p-4 font-medium text-gray-800">{b.client_name}</td>
-                    <td className="p-4 text-right font-bold text-gray-800">
-                      {Number(b.total).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                    </td>
-                    <td className="p-4 text-center space-x-2">
-                      <button onClick={() => handleEdit(b.id)} className="text-blue-600 hover:underline text-sm font-medium">Editar</button>
-                      <button onClick={() => handleDelete(b.id)} className="text-red-500 hover:underline text-sm font-medium">Excluir</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div>
+            {budgets.slice(0, 5).map((b) => (
+              <div key={b.id} className="flex items-center justify-between px-5 py-3.5 border-b border-gray-50 hover:bg-gray-50 transition last:border-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs shrink-0">
+                    #{b.display_id || "—"}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-800 text-sm truncate">{b.client_name}</p>
+                    <p className="text-xs text-gray-400">{new Date(b.created_at).toLocaleDateString("pt-BR")}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  {b.status === "accepted" && (
+                    <span className="text-xs bg-green-100 text-green-700 font-bold px-2 py-0.5 rounded-full hidden sm:inline">✓ Aceito</span>
+                  )}
+                  <span className="font-bold text-gray-800 text-sm">
+                    {Number(b.total).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                  </span>
+                  <button onClick={() => handleEdit(b.id)} className="text-blue-600 hover:text-blue-800 text-xs font-semibold transition">
+                    Editar
+                  </button>
+                </div>
+              </div>
+            ))}
+            {budgets.length > 5 && (
+              <div className="p-4 text-center">
+                <Link to="/app/budgets" className="text-sm text-blue-600 font-semibold hover:underline">
+                  Ver todos os {budgets.length} orçamentos →
+                </Link>
+              </div>
+            )}
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, icon, color, small }) {
+  const colors = {
+    blue: "bg-blue-50 border-blue-100 text-blue-700",
+    purple: "bg-purple-50 border-purple-100 text-purple-700",
+    green: "bg-green-50 border-green-100 text-green-700",
+    orange: "bg-orange-50 border-orange-100 text-orange-700",
+  };
+  return (
+    <div className={`rounded-2xl border p-4 ${colors[color]}`}>
+      <div className="text-2xl mb-1">{icon}</div>
+      <p className="text-xs font-medium opacity-70 mb-1">{label}</p>
+      <p className={`font-bold ${small ? "text-lg" : "text-2xl"}`}>{value}</p>
     </div>
   );
 }

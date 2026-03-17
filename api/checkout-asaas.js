@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { handlePreflight } from "./_cors.js";
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -10,6 +11,7 @@ const supabaseAdmin = createClient(
  * O userId agora vem do token JWT, não do body da requisição.
  */
 export default async function handler(req, res) {
+  if (handlePreflight(req, res)) return;
   if (req.method !== "POST") return res.status(405).end();
 
   // Valida o JWT
@@ -29,6 +31,18 @@ export default async function handler(req, res) {
 
   const { name, cpf, email, planId } = req.body;
   const userId = user.id; // Usa o ID do JWT, não do body
+
+  // Validação server-side dos campos obrigatórios
+  if (!name || typeof name !== "string" || name.trim().length < 3) {
+    return res.status(400).json({ error: "Nome inválido." });
+  }
+  if (!email || typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: "E-mail inválido." });
+  }
+  const cpfClean = typeof cpf === "string" ? cpf.replace(/\D/g, "") : "";
+  if (cpfClean.length !== 11 || /^(\d)\1{10}$/.test(cpfClean)) {
+    return res.status(400).json({ error: "CPF inválido." });
+  }
 
   const apiKey = process.env.ASAAS_API_KEY;
   const apiUrl = process.env.ASAAS_URL || "https://www.asaas.com/api/v3";
@@ -122,6 +136,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ invoiceUrl: finalUrl });
   } catch (error) {
     console.error("ERRO ASAAS:", error.message);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: "Erro ao processar pagamento. Tente novamente." });
   }
 }

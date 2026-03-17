@@ -26,8 +26,14 @@ export default async function handler(req, res) {
   const eventosDeSucesso = ["PAYMENT_CONFIRMED", "PAYMENT_RECEIVED"];
 
   if (eventosDeSucesso.includes(event)) {
-    const userId = payment.externalReference;
-    const subscriptionId = payment.subscription;
+    const userId = payment?.externalReference;
+    const subscriptionId = payment?.subscription;
+
+    // Guard: ignora se não tiver userId válido (UUID)
+    if (!userId || typeof userId !== "string" || userId.length < 10) {
+      console.warn("Asaas webhook: externalReference ausente ou inválido.");
+      return res.status(200).json({ received: true });
+    }
 
     let planType = "pro";
     if (payment.description && payment.description.toLowerCase().includes("starter"))
@@ -35,26 +41,25 @@ export default async function handler(req, res) {
     if (payment.description && payment.description.toLowerCase().includes("anual"))
       planType = "annual";
 
-    if (userId) {
-      const { error } = await supabase
-        .from("subscriptions")
-        .upsert(
-          {
-            user_id: userId,
-            status: "active",
-            provider: "asaas",
-            subscription_id: subscriptionId,
-            plan_type: planType,
-            updated_at: new Date(),
-          },
-          { onConflict: "user_id" }
-        );
+    const { error } = await supabase
+      .from("subscriptions")
+      .upsert(
+        {
+          user_id: userId,
+          status: "active",
+          provider: "asaas",
+          subscription_id: subscriptionId,
+          plan_type: planType,
+          updated_at: new Date(),
+        },
+        { onConflict: "user_id" }
+      );
 
-      if (error) console.error("Erro Supabase Asaas:", error);
-    }
+    if (error) console.error("Erro Supabase Asaas:", error.message);
   } else if (event === "PAYMENT_OVERDUE") {
-    const userId = payment.externalReference;
-    if (userId) {
+    const userId = payment?.externalReference;
+    // Guard: nunca atualiza sem userId válido
+    if (userId && typeof userId === "string" && userId.length >= 10) {
       await supabase
         .from("subscriptions")
         .update({ status: "past_due" })

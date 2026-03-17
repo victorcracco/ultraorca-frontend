@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
+import { handlePreflight } from "./_cors.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const supabaseAdmin = createClient(
@@ -12,6 +13,8 @@ const supabaseAdmin = createClient(
  * O userId agora vem do token JWT, não do body da requisição.
  */
 export default async function handler(req, res) {
+  if (handlePreflight(req, res)) return;
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -61,6 +64,6 @@ export default async function handler(req, res) {
     res.status(200).json({ url: session.url });
   } catch (err) {
     console.error("Erro Stripe:", err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Erro ao processar pagamento. Tente novamente." });
   }
 }

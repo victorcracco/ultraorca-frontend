@@ -40,6 +40,7 @@ export default function Layout() {
   const navItems = [
     { name: "Início", path: "/app", icon: "🏠", exact: true },
     { name: "Novo Orçamento", path: "/app/new-budget", icon: "📝" },
+    { name: "Meus Orçamentos", path: "/app/budgets", icon: "📋" },
     { name: "Meus Produtos", path: "/app/products", icon: "📦" },
     { name: "Dados da Empresa", path: "/app/my-data", icon: "🏢" },
     { name: "Assinatura", path: "/app/subscription", icon: "💎" },

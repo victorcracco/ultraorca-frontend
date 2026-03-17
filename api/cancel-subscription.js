@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
+import { handlePreflight } from "./_cors.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const supabaseAdmin = createClient(
@@ -12,6 +13,7 @@ const supabaseAdmin = createClient(
  * Isso impede que um usuário cancele a assinatura de outro usuário.
  */
 export default async function handler(req, res) {
+  if (handlePreflight(req, res)) return;
   if (req.method !== "POST")
     return res.status(405).json({ error: "Method not allowed" });
 
@@ -98,6 +100,6 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error("Erro cancelamento:", err);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: "Erro ao cancelar assinatura. Tente novamente." });
   }
 }

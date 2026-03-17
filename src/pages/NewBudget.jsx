@@ -4,11 +4,15 @@ import ProductSelector from "../components/ProductSelector";
 import { supabase } from "../services/supabase";
 import { generateBudgetPDF } from "../utils/generateBudgetPDF";
 import { saveBudget, getBudgetById, checkPlanLimit, getUserPlan } from "../services/budgetService";
+import { useToast } from "../components/Toast";
+import ConfirmModal from "../components/ConfirmModal";
 
 export default function NewBudget() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const toast = useToast();
   const editId = searchParams.get("id");
+  const [confirmModal, setConfirmModal] = useState({ open: false, message: "", onConfirm: null });
 
   // --- ESTADOS DO ORÇAMENTO ---
   const [budgetId, setBudgetId] = useState(null);
@@ -32,6 +36,7 @@ export default function NewBudget() {
 
   // --- ESTADOS DE CARREGAMENTO E PLANO ---
   const [loadingSave, setLoadingSave] = useState(false);
+  const [loadingPDF, setLoadingPDF] = useState(false);
   const [isVerifying, setIsVerifying] = useState(true);
 
   const [userPlan, setUserPlan] = useState("free");
@@ -39,10 +44,14 @@ export default function NewBudget() {
   const [limitDetails, setLimitDetails] = useState({ title: "", msg: "" });
 
   const colorOptions = [
-    { name: "Azul", value: "#2563eb", bgClass: "bg-blue-600" },
-    { name: "Verde", value: "#16a34a", bgClass: "bg-green-600" },
-    { name: "Preto", value: "#000000", bgClass: "bg-black" },
-    { name: "Cinza", value: "#4b5563", bgClass: "bg-gray-600" },
+    { name: "Azul", value: "#2563eb" },
+    { name: "Índigo", value: "#4f46e5" },
+    { name: "Verde", value: "#16a34a" },
+    { name: "Esmeralda", value: "#059669" },
+    { name: "Vermelho", value: "#dc2626" },
+    { name: "Laranja", value: "#ea580c" },
+    { name: "Preto", value: "#111827" },
+    { name: "Cinza", value: "#4b5563" },
   ];
 
   // ==================================================================================
@@ -53,27 +62,37 @@ export default function NewBudget() {
       setIsVerifying(true);
 
       try {
-        // A. Carrega Produtos
-        setProducts(getProducts());
+        // A. Carrega dados em paralelo: plano do usuário + perfil da empresa
+        const [plan, profileResult] = await Promise.all([
+          getUserPlan(),
+          supabase.auth.getUser().then(({ data: { user } }) => {
+            if (!user) return null;
+            return supabase.from("profiles").select("*").eq("id", user.id).single()
+              .then(({ data }) => data);
+          })
+        ]);
 
-        // B. Carrega Dados da Empresa (LocalStorage)
-        const savedData = localStorage.getItem("orcasimples_dados");
-        if (savedData) {
-          try {
-            const parsed = JSON.parse(savedData);
-            setCompanyData(parsed);
-            if (parsed.corPadrao) setPrimaryColor(parsed.corPadrao);
-            if (parsed.validadePadrao) setValidityDays(parsed.validadePadrao);
-          } catch (e) { }
-        }
-
-        // C. Busca Plano Atualizado no Banco
-        const plan = await getUserPlan();
         setUserPlan(plan);
 
-        // D. Verifica Limites (Apenas se for Novo Orçamento)
+        if (profileResult) {
+          setCompanyData(profileResult);
+          if (profileResult.primary_color) setPrimaryColor(profileResult.primary_color);
+        } else {
+          // Fallback: LocalStorage
+          const savedData = localStorage.getItem("orcasimples_dados");
+          if (savedData) {
+            try {
+              const parsed = JSON.parse(savedData);
+              setCompanyData(parsed);
+              if (parsed.corPadrao) setPrimaryColor(parsed.corPadrao);
+              if (parsed.validadePadrao) setValidityDays(parsed.validadePadrao);
+            } catch (e) { }
+          }
+        }
+
+        // B. Verifica Limites (Apenas se for Novo Orçamento)
         if (!editId) {
-          const check = await checkPlanLimit();
+          const check = await checkPlanLimit(plan);
 
           if (!check.allowed) {
             setIsLimitReached(true);
@@ -165,17 +184,21 @@ export default function NewBudget() {
 
   const handleClearForm = () => {
     const confirmMsg = editId ? "Sair da edição e criar novo?" : "Limpar todos os campos?";
-    if (window.confirm(confirmMsg)) {
-      setClient("");
-      setClientAddress("");
-      setItems([]);
-      setBudgetId(null);
-      setDisplayId(null);
-      setSaveFeedback("");
-      localStorage.removeItem("budget_draft");
-      // M6 FIX: navega sem forçar reload da página — o useEffect com [editId] re-inicializa
-      navigate("/app/new-budget", { replace: true });
-    }
+    setConfirmModal({
+      open: true,
+      message: confirmMsg,
+      onConfirm: () => {
+        setClient("");
+        setClientAddress("");
+        setItems([]);
+        setBudgetId(null);
+        setDisplayId(null);
+        setSaveFeedback("");
+        localStorage.removeItem("budget_draft");
+        navigate("/app/new-budget", { replace: true });
+        setConfirmModal({ open: false, message: "", onConfirm: null });
+      }
+    });
   };
 
 
@@ -201,9 +224,9 @@ export default function NewBudget() {
 
   // --- VALIDAÇÃO ---
   const validateForm = () => {
-    if (!client.trim()) { alert("Preencha o nome do cliente."); return false; }
-    if (items.length === 0) { alert("Adicione pelo menos um item."); return false; }
-    if (items.some(i => !i.description)) { alert("Preencha a descrição dos itens."); return false; }
+    if (!client.trim()) { toast.error("Preencha o nome do cliente."); return false; }
+    if (items.length === 0) { toast.error("Adicione pelo menos um item."); return false; }
+    if (items.some(i => !i.description)) { toast.error("Preencha a descrição dos itens."); return false; }
     return true;
   };
 
@@ -216,7 +239,7 @@ export default function NewBudget() {
 
   const handleSetLayout = (newLayout) => {
     if (isLayoutLocked(newLayout)) {
-      alert("🔒 Plano Iniciante: Apenas o layout Moderno está disponível.\nFaça upgrade para o Profissional para liberar todos.");
+      toast.warning("Plano Iniciante: Apenas o layout Moderno está disponível. Faça upgrade para liberar todos.");
       return;
     }
     setLayout(newLayout);
@@ -257,13 +280,23 @@ export default function NewBudget() {
     window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
   };
 
-  const handleGeneratePDF = () => {
+  const handleGeneratePDF = async () => {
     if (isLimitReached) return;
     if (!validateForm()) return;
-    generateBudgetPDF({
-      client, clientAddress, items, total, layout, primaryColor,
-      companyData, validityDays, displayId: displayId || null
-    });
+    setLoadingPDF(true);
+    // Yield to event loop so React re-renders the spinner before blocking the main thread
+    await new Promise(resolve => setTimeout(resolve, 50));
+    try {
+      await generateBudgetPDF({
+        client, clientAddress, items, total, layout, primaryColor,
+        companyData, validityDays, displayId: displayId || null
+      });
+    } catch (error) {
+      console.error("Erro PDF:", error);
+      toast.error("Erro ao gerar o PDF. Verifique os dados e tente novamente.");
+    } finally {
+      setLoadingPDF(false);
+    }
   };
 
   const handleSaveBudget = async () => {
@@ -278,12 +311,12 @@ export default function NewBudget() {
         if (!check.allowed) {
           setLoadingSave(false);
           setIsLimitReached(true);
-          alert("Limite atingido. Faça upgrade.");
+          toast.warning("Limite atingido. Faça upgrade para continuar.");
           return;
         }
       }
 
-      const budgetData = { id: budgetId || editId, client, clientAddress, items, total, primaryColor, validityDays };
+      const budgetData = { id: budgetId || editId, client, clientAddress, items, total, layout, primaryColor, validityDays };
 
       const newId = await saveBudget(budgetData);
       setBudgetId(newId);
@@ -299,7 +332,7 @@ export default function NewBudget() {
 
     } catch (error) {
       console.error("Erro save:", error);
-      alert("Erro ao salvar.");
+      toast.error("Erro ao salvar. Tente novamente.");
     } finally {
       setLoadingSave(false);
     }
@@ -322,7 +355,14 @@ export default function NewBudget() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6 relative pb-24">
+    <div className="max-w-7xl mx-auto px-4 py-5 md:p-6 relative pb-24">
+
+      <ConfirmModal
+        open={confirmModal.open}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal({ open: false, message: "", onConfirm: null })}
+      />
 
       {/* Modal Bloqueio (Popup) */}
       {showUpgradeModal && (
@@ -358,10 +398,10 @@ export default function NewBudget() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* --- COLUNA ESQUERDA: FORMULÁRIO --- */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-5 order-1">
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
             <h2 className="text-lg font-bold text-gray-700 mb-4 border-b pb-2">1. Cliente</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -399,46 +439,133 @@ export default function NewBudget() {
               )}
             </div>
 
-            <div className="space-y-3">
-              {items.map((item, index) => (
-                <div key={item.id} className="flex flex-col md:flex-row gap-3 items-end md:items-center bg-white p-3 rounded-lg border border-gray-200">
-                  <span className="hidden md:block text-gray-400 text-xs w-6 text-center">{index + 1}.</span>
-                  <div className="flex-grow w-full">
-                    <input
-                      disabled={isLimitReached}
-                      className="w-full p-2 border rounded text-sm outline-none focus:border-blue-500"
-                      placeholder="Descrição"
-                      value={item.description}
-                      onChange={(e) => updateItem(item.id, "description", e.target.value)}
-                    />
-                  </div>
-                  <div className="w-full md:w-24">
-                    <input
-                      disabled={isLimitReached}
-                      type="number"
-                      className="w-full p-2 border rounded text-sm text-center outline-none focus:border-blue-500"
-                      value={item.quantity}
-                      onChange={(e) => updateItem(item.id, "quantity", e.target.value)}
-                    />
-                  </div>
-                  <div className="w-full md:w-32">
-                    <input
-                      disabled={isLimitReached}
-                      type="number"
-                      className="w-full p-2 border rounded text-sm text-right outline-none focus:border-blue-500"
-                      value={item.price}
-                      onChange={(e) => updateItem(item.id, "price", e.target.value)}
-                    />
-                  </div>
-                  {!isLimitReached && (
-                    <div className="flex justify-end md:w-auto">
-                      <button onClick={() => removeItem(item.id)} className="text-gray-400 hover:text-red-500 p-2">
-                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                      </button>
-                    </div>
-                  )}
+            {/* Cabeçalho das colunas (só desktop) */}
+            {items.length > 0 && (
+              <div className="hidden md:flex gap-3 items-center px-3 pb-1">
+                <span className="w-6" />
+                <div className="flex-grow">
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Descrição</span>
                 </div>
-              ))}
+                <div className="w-24 text-center">
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Qtd</span>
+                </div>
+                <div className="w-32 text-right">
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Preço Unit.</span>
+                </div>
+                <div className="w-20 text-right">
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Subtotal</span>
+                </div>
+                {!isLimitReached && <div className="w-9" />}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              {items.map((item, index) => {
+                const lineTotal = (Number(item.quantity) || 0) * (Number(item.price) || 0);
+                return (
+                  <div key={item.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    {/* Número do item */}
+                    <div className="flex items-center gap-2 px-3 pt-2.5 md:hidden">
+                      <span className="text-xs font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Item {index + 1}</span>
+                      {!isLimitReached && (
+                        <button onClick={() => removeItem(item.id)} className="ml-auto text-gray-300 hover:text-red-500 p-1 transition">
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      )}
+                    </div>
+                    {/* Mobile: layout em grid */}
+                    <div className="md:hidden grid grid-cols-2 gap-2 p-3 pt-1.5">
+                      <div className="col-span-2">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Descrição do serviço / produto</label>
+                        <input
+                          disabled={isLimitReached}
+                          className="w-full p-2.5 border border-gray-200 rounded-lg text-sm outline-none focus:border-blue-500 bg-gray-50"
+                          placeholder="Ex: Instalação elétrica"
+                          value={item.description}
+                          onChange={(e) => updateItem(item.id, "description", e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Quantidade</label>
+                        <input
+                          disabled={isLimitReached}
+                          type="number"
+                          min="1"
+                          className="w-full p-2.5 border border-gray-200 rounded-lg text-sm text-center outline-none focus:border-blue-500 bg-gray-50"
+                          value={item.quantity}
+                          onChange={(e) => updateItem(item.id, "quantity", e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Preço unitário (R$)</label>
+                        <input
+                          disabled={isLimitReached}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="w-full p-2.5 border border-gray-200 rounded-lg text-sm text-right outline-none focus:border-blue-500 bg-gray-50"
+                          placeholder="0,00"
+                          value={item.price}
+                          onChange={(e) => updateItem(item.id, "price", e.target.value)}
+                        />
+                      </div>
+                      {lineTotal > 0 && (
+                        <div className="col-span-2 bg-blue-50 rounded-lg px-3 py-2 flex justify-between items-center">
+                          <span className="text-xs text-blue-500 font-medium">Subtotal</span>
+                          <span className="text-sm font-bold text-blue-700">
+                            {lineTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {/* Desktop: layout em linha */}
+                    <div className="hidden md:flex gap-3 items-center p-3">
+                      <span className="text-gray-300 text-xs w-6 text-center font-bold">{index + 1}</span>
+                      <div className="flex-grow">
+                        <input
+                          disabled={isLimitReached}
+                          className="w-full p-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-blue-500 bg-gray-50"
+                          placeholder="Descrição do serviço ou produto"
+                          value={item.description}
+                          onChange={(e) => updateItem(item.id, "description", e.target.value)}
+                        />
+                      </div>
+                      <div className="w-24">
+                        <input
+                          disabled={isLimitReached}
+                          type="number"
+                          min="1"
+                          className="w-full p-2 border border-gray-200 rounded-lg text-sm text-center outline-none focus:border-blue-500 bg-gray-50"
+                          value={item.quantity}
+                          onChange={(e) => updateItem(item.id, "quantity", e.target.value)}
+                        />
+                      </div>
+                      <div className="w-32">
+                        <input
+                          disabled={isLimitReached}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="w-full p-2 border border-gray-200 rounded-lg text-sm text-right outline-none focus:border-blue-500 bg-gray-50"
+                          placeholder="0,00"
+                          value={item.price}
+                          onChange={(e) => updateItem(item.id, "price", e.target.value)}
+                        />
+                      </div>
+                      <div className="w-20 text-right">
+                        <span className="text-sm font-semibold text-gray-500">
+                          {lineTotal > 0 ? lineTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—"}
+                        </span>
+                      </div>
+                      {!isLimitReached && (
+                        <button onClick={() => removeItem(item.id)} className="text-gray-300 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition">
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             {!isLimitReached && (
@@ -448,8 +575,8 @@ export default function NewBudget() {
         </div>
 
         {/* --- COLUNA DIREITA: RESUMO E AÇÕES --- */}
-        <div className="lg:col-span-1">
-          <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 sticky top-6">
+        <div className="lg:col-span-1 order-2">
+          <div className="bg-white p-5 rounded-xl shadow-lg border border-gray-200 lg:sticky lg:top-6">
             <h2 className="text-lg font-bold text-gray-800 mb-6">Total: {total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</h2>
 
             {saveFeedback && <div className="bg-green-100 text-green-700 text-sm p-3 rounded mb-4 text-center font-bold animate-fade-in-down">{saveFeedback}</div>}
@@ -501,10 +628,30 @@ export default function NewBudget() {
                 <div className="mb-6 space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Cor do Documento</label>
-                    <div className="flex gap-3">
+                    <div className="flex flex-wrap gap-2 items-center">
                       {colorOptions.map((c) => (
-                        <button key={c.value} className={`w-8 h-8 rounded-full border-2 transition hover:scale-110 ${c.bgClass} ${primaryColor === c.value ? "border-gray-800 ring-2 ring-gray-200 ring-offset-1" : "border-transparent"}`} onClick={() => setPrimaryColor(c.value)} />
+                        <button
+                          key={c.value}
+                          title={c.name}
+                          className={`w-7 h-7 rounded-full border-2 transition hover:scale-110 ${primaryColor === c.value ? "border-gray-800 ring-2 ring-gray-300 ring-offset-1 scale-110" : "border-transparent"}`}
+                          style={{ backgroundColor: c.value }}
+                          onClick={() => setPrimaryColor(c.value)}
+                        />
                       ))}
+                      {/* Color picker customizado */}
+                      <label className="relative w-7 h-7 rounded-full border-2 border-dashed border-gray-300 hover:border-gray-400 cursor-pointer transition overflow-hidden flex items-center justify-center" title="Cor personalizada">
+                        <span className="text-gray-400 text-xs font-bold">+</span>
+                        <input
+                          type="color"
+                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                          value={primaryColor}
+                          onChange={(e) => setPrimaryColor(e.target.value)}
+                        />
+                      </label>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full border border-gray-200" style={{ backgroundColor: primaryColor }} />
+                      <span className="text-xs text-gray-400 font-mono">{primaryColor}</span>
                     </div>
                   </div>
                   <div>
@@ -520,10 +667,23 @@ export default function NewBudget() {
                 <div className="space-y-3">
                   <button
                     onClick={handleGeneratePDF}
-                    className="w-full py-4 px-6 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 flex justify-center items-center gap-2 transition active:scale-95"
+                    disabled={loadingPDF}
+                    className={`w-full py-4 px-6 rounded-xl font-bold text-white flex justify-center items-center gap-2 transition active:scale-95 ${loadingPDF ? "bg-blue-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"}`}
                   >
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                    Gerar PDF
+                    {loadingPDF ? (
+                      <>
+                        <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Gerando PDF...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                        Gerar PDF
+                      </>
+                    )}
                   </button>
 
                   <button

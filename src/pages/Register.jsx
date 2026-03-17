@@ -2,14 +2,17 @@ import React, { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { supabase } from "../services/supabase";
-import ReCAPTCHA from "react-google-recaptcha"; // <--- 2. Import do ReCAPTCHA
+import ReCAPTCHA from "react-google-recaptcha";
+import { useToast } from "../components/Toast";
+
+const RECAPTCHA_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
 
 export default function Register() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [loading, setLoading] = useState(false);
 
-  // --- NOVO: Estado do Captcha ---
-  const [captchaToken, setCaptchaToken] = useState(null);
+  const [captchaToken, setCaptchaToken] = useState(RECAPTCHA_KEY ? null : "bypass");
   const captchaRef = useRef(null);
 
   // Estado para a Logo
@@ -54,15 +57,13 @@ export default function Register() {
   const handleRegister = async (e) => {
     e.preventDefault();
 
-    // --- NOVO: Validação do Captcha ---
-    if (!captchaToken) {
-      alert("Por favor, confirme que você não é um robô.");
+    if (RECAPTCHA_KEY && !captchaToken) {
+      toast.error("Por favor, confirme que você não é um robô.");
       return;
     }
 
-    // 1. Validação de Senha (Double Check)
     if (formData.password !== formData.confirmPassword) {
-      alert("As senhas não conferem. Por favor, digite novamente.");
+      toast.error("As senhas não conferem. Por favor, digite novamente.");
       return;
     }
 
@@ -74,7 +75,7 @@ export default function Register() {
         email: formData.email,
         password: formData.password,
         options: {
-          captchaToken: captchaToken, // <--- Envia o token para o Supabase
+          ...(RECAPTCHA_KEY ? { captchaToken } : {}),
           // Salvamos tudo no metadata para facilitar
           data: {
             full_name: formData.personalName,   // Nome do usuário
@@ -111,17 +112,14 @@ export default function Register() {
         }
       }
 
-      // 4. Sucesso
-      alert("Conta criada com sucesso! Bem-vindo ao UltraOrça.");
       navigate("/app");
 
     } catch (error) {
       console.error("Erro no cadastro:", error);
-      alert(error.message || "Erro ao criar conta. Tente novamente.");
+      toast.error(error.message || "Erro ao criar conta. Tente novamente.");
 
-      // Reseta o captcha se der erro para o usuário tentar de novo
       if (captchaRef.current) captchaRef.current.reset();
-      setCaptchaToken(null);
+      setCaptchaToken(RECAPTCHA_KEY ? null : "bypass");
 
     } finally {
       setLoading(false);
@@ -272,18 +270,20 @@ export default function Register() {
               </div>
             </div>
 
-            {/* --- NOVO: RECAPTCHA --- */}
-            <div className="flex justify-center mt-4">
-              <ReCAPTCHA
-                ref={captchaRef}
-                sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
-                onChange={(token) => setCaptchaToken(token)}
-              />
-            </div>
+            {/* ReCAPTCHA — só renderiza se a chave estiver configurada */}
+            {RECAPTCHA_KEY && (
+              <div className="flex justify-center mt-4">
+                <ReCAPTCHA
+                  ref={captchaRef}
+                  sitekey={RECAPTCHA_KEY}
+                  onChange={(token) => setCaptchaToken(token)}
+                />
+              </div>
+            )}
 
             <button
               type="submit"
-              disabled={loading || !captchaToken} // Trava se não tiver token
+              disabled={loading || !captchaToken}
               className={`w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition shadow-lg mt-4 flex justify-center items-center gap-2 transform active:scale-[0.98] ${loading || !captchaToken ? "opacity-70 cursor-not-allowed bg-gray-400" : ""}`}
             >
               {loading ? (

@@ -2,8 +2,10 @@ import { useState, useRef } from "react";
 import { supabase } from "../services/supabase";
 import { Link } from "react-router-dom";
 import ReCAPTCHA from "react-google-recaptcha";
+import { useToast } from "../components/Toast";
 
-// M2 FIX: Mapeamento de mensagens de erro amigáveis em PT-BR
+const RECAPTCHA_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+
 const ERROR_MESSAGES = {
   "User not found": "E-mail não encontrado em nossa base.",
   "Email rate limit exceeded": "Muitas tentativas. Aguarde alguns minutos.",
@@ -12,42 +14,37 @@ const ERROR_MESSAGES = {
 };
 
 export default function ForgotPassword() {
+  const toast = useToast();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [captchaToken, setCaptchaToken] = useState(null);
+  const [captchaToken, setCaptchaToken] = useState(RECAPTCHA_KEY ? null : "bypass");
   const captchaRef = useRef(null);
 
   const handleReset = async (e) => {
     e.preventDefault();
 
-    if (!captchaToken) {
-      alert("Por favor, confirme que você não é um robô.");
+    if (RECAPTCHA_KEY && !captchaToken) {
+      toast.error("Por favor, confirme que você não é um robô.");
       return;
     }
 
     setLoading(true);
 
-    // C3 FIX: URL dinâmica baseada na origem atual (funciona em dev e produção)
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/update-password`,
-      captchaToken,
+      ...(RECAPTCHA_KEY ? { captchaToken } : {}),
     });
 
     setLoading(false);
 
     if (captchaRef.current) captchaRef.current.reset();
-    setCaptchaToken(null);
+    setCaptchaToken(RECAPTCHA_KEY ? null : "bypass");
 
     if (error) {
-      // M2 FIX: Mensagem amigável em vez de erro técnico do Supabase
-      const friendlyMsg =
-        ERROR_MESSAGES[error.message] ||
-        "Erro ao enviar o link. Tente novamente.";
-      alert(friendlyMsg);
+      const friendlyMsg = ERROR_MESSAGES[error.message] || "Erro ao enviar o link. Tente novamente.";
+      toast.error(friendlyMsg);
     } else {
-      alert(
-        "Se este e-mail estiver cadastrado, você receberá o link em instantes."
-      );
+      toast.success("Se este e-mail estiver cadastrado, você receberá o link em instantes.");
       setEmail("");
     }
   };
@@ -55,9 +52,7 @@ export default function ForgotPassword() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
-        <h1 className="text-2xl font-bold text-gray-800 mb-2">
-          Recuperar Senha
-        </h1>
+        <h1 className="text-2xl font-bold text-gray-800 mb-2">Recuperar Senha</h1>
         <p className="text-gray-500 mb-6">Digite seu e-mail para receber o link.</p>
 
         <form onSubmit={handleReset} className="space-y-4">
@@ -70,29 +65,27 @@ export default function ForgotPassword() {
             required
           />
 
-          <div className="flex justify-center">
-            <ReCAPTCHA
-              ref={captchaRef}
-              sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
-              onChange={(token) => setCaptchaToken(token)}
-            />
-          </div>
+          {RECAPTCHA_KEY && (
+            <div className="flex justify-center">
+              <ReCAPTCHA
+                ref={captchaRef}
+                sitekey={RECAPTCHA_KEY}
+                onChange={(token) => setCaptchaToken(token)}
+              />
+            </div>
+          )}
 
           <button
             disabled={loading || !captchaToken}
-            className={`w-full p-3 rounded-lg font-bold text-white transition ${loading || !captchaToken
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700"
-              }`}
+            className={`w-full p-3 rounded-lg font-bold text-white transition ${
+              loading || !captchaToken ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
+            }`}
           >
             {loading ? "Enviando..." : "Enviar Link"}
           </button>
         </form>
 
-        <Link
-          to="/login"
-          className="block text-center mt-4 text-sm text-gray-500 hover:underline"
-        >
+        <Link to="/login" className="block text-center mt-4 text-sm text-gray-500 hover:underline">
           Voltar ao Login
         </Link>
       </div>

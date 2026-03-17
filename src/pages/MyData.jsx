@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../services/supabase";
 import { Link } from "react-router-dom";
+import { useToast } from "../components/Toast";
 
 export default function MyData() {
+  const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [cepLoading, setCepLoading] = useState(false);
 
@@ -87,7 +89,7 @@ export default function MyData() {
           // Foca no número após carregar
           document.getElementById("numberInput").focus();
         } else {
-          alert("CEP não encontrado.");
+          toast.warning("CEP não encontrado.");
         }
       } catch (error) {
         console.error("Erro ao buscar CEP:", error);
@@ -147,7 +149,7 @@ export default function MyData() {
       setPreviewUrl(publicUrl);
     } catch (error) {
       console.error('Erro ao fazer upload da logo:', error);
-      alert('Erro ao enviar a imagem. Tente novamente.');
+      toast.error('Erro ao enviar a imagem. Tente novamente.');
       // Mantém o preview local em caso de erro
     }
   };
@@ -204,11 +206,11 @@ export default function MyData() {
         logo: formData.logo_url
       }));
 
-      alert("Dados salvos com sucesso!");
+      toast.success("Dados salvos com sucesso!");
 
     } catch (error) {
       console.error("Erro ao salvar:", error);
-      alert("Erro ao salvar dados.");
+      toast.error("Erro ao salvar dados. Tente novamente.");
     } finally {
       setLoading(false);
     }

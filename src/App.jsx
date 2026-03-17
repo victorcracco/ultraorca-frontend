@@ -19,8 +19,12 @@ import UpdatePassword from "./pages/UpdatePassword";
 import Terms from "./pages/legal/Terms";
 import Privacy from "./pages/legal/Privacy";
 
+// Página pública
+import PublicBudget from "./pages/PublicBudget";
+
 // Páginas da Aplicação (SaaS)
 import Dashboard from "./pages/Dashboard";
+import Budgets from "./pages/Budgets";
 import NewBudget from "./pages/NewBudget";
 import Products from "./pages/Products";
 import MyData from "./pages/MyData";
@@ -48,10 +52,14 @@ export default function App() {
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
 
+        {/* Orçamento público (sem auth) */}
+        <Route path="/orcamento/:id" element={<PublicBudget />} />
+
         {/* --- ROTAS PROTEGIDAS DA APLICAÇÃO (SaaS) --- */}
         <Route element={<PrivateRoute />}>
           <Route path="/app" element={<Layout />}>
             <Route index element={<Dashboard />} />
+            <Route path="budgets" element={<Budgets />} />
             <Route path="new-budget" element={<NewBudget />} />
             <Route path="products" element={<Products />} />
             <Route path="my-data" element={<MyData />} />

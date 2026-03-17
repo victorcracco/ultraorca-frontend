@@ -2,48 +2,49 @@ import React, { useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { supabase } from "../services/supabase";
-import ReCAPTCHA from "react-google-recaptcha"; // <--- IMPORT
+import ReCAPTCHA from "react-google-recaptcha";
+import { useToast } from "../components/Toast";
+
+const RECAPTCHA_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
 
 export default function Login() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  
-  // Captcha
-  const [captchaToken, setCaptchaToken] = useState(null);
+
+  // Se não há chave configurada, captcha é ignorado (dev/sem chave)
+  const [captchaToken, setCaptchaToken] = useState(RECAPTCHA_KEY ? null : "bypass");
   const captchaRef = useRef(null);
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    
-    // Verifica Captcha
-    if (!captchaToken) {
-        alert("Confirme que você não é um robô.");
-        return;
+
+    if (RECAPTCHA_KEY && !captchaToken) {
+      toast.error("Confirme que você não é um robô.");
+      return;
     }
 
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
-        options: { captchaToken } // Envia token para Supabase (Opcional, mas bom)
+        options: RECAPTCHA_KEY ? { captchaToken } : undefined,
       });
 
       if (error) throw error;
+      navigate("/app");
 
-      navigate("/app"); 
-      
     } catch (error) {
       console.error("Erro login:", error);
-      alert("E-mail ou senha incorretos. Verifique seus dados.");
-      
-      // Reseta o captcha se errar a senha, para evitar brute-force
+      toast.error("E-mail ou senha incorretos. Verifique seus dados.");
+
       if (captchaRef.current) captchaRef.current.reset();
-      setCaptchaToken(null);
-      
+      setCaptchaToken(RECAPTCHA_KEY ? null : "bypass");
+
     } finally {
       setLoading(false);
     }
@@ -108,18 +109,20 @@ export default function Login() {
               />
             </div>
 
-            {/* --- RECAPTCHA AQUI --- */}
-            <div className="flex justify-center">
+            {/* ReCAPTCHA — só renderiza se a chave estiver configurada */}
+            {RECAPTCHA_KEY && (
+              <div className="flex justify-center">
                 <ReCAPTCHA
-                    ref={captchaRef}
-                    sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
-                    onChange={(token) => setCaptchaToken(token)}
+                  ref={captchaRef}
+                  sitekey={RECAPTCHA_KEY}
+                  onChange={(token) => setCaptchaToken(token)}
                 />
-            </div>
+              </div>
+            )}
 
             <button
               type="submit"
-              disabled={loading || !captchaToken} // Bloqueia sem captcha
+              disabled={loading || !captchaToken}
               className={`w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition shadow-lg hover:shadow-blue-200 flex justify-center items-center gap-2 transform active:scale-[0.98] ${loading || !captchaToken ? "opacity-70 cursor-not-allowed bg-gray-400" : ""}`}
             >
               {loading ? (

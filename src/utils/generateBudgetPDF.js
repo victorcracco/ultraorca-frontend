@@ -330,7 +330,7 @@ export async function generateBudgetPDF({
         // --- POSIÇÃO TABELA ---
         let startY = 90;
         if (layout === "executive") startY = 105;
-        if (layout === "minimal") startY = logoImg ? 110 : 80;
+        if (layout === "minimal") startY = logoSrc ? 110 : 80;
         if (layout === "classic") startY = 110;
 
         // --- DATAS E VALIDADE ---
@@ -418,6 +418,6 @@ export async function generateBudgetPDF({
 
     } catch (error) {
         console.error("Erro PDF:", error);
-        alert("Erro ao gerar PDF.");
+        throw error;
     }
 }
