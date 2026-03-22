@@ -297,6 +297,7 @@ export default function NewBudget() {
         client, clientAddress, items, total, layout, primaryColor,
         companyData, validityDays, displayId: displayId || null
       });
+      toast.success("PDF gerado com sucesso!");
     } catch (error) {
       console.error("Erro PDF:", error);
       toast.error("Erro ao gerar o PDF. Verifique os dados e tente novamente.");

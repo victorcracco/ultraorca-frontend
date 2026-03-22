@@ -402,19 +402,30 @@ export async function generateBudgetPDF({
         doc.text(footerText, pageWidth / 2, pageHeight - 10, { align: "center" });
 
         // --- SALVAR ---
+        const pdfBlob = doc.output('blob');
+
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         if (isMobile && navigator.share && navigator.canShare) {
             try {
-                const blob = doc.output('blob');
-                const file = new File([blob], fileName, { type: "application/pdf" });
+                const file = new File([pdfBlob], fileName, { type: "application/pdf" });
                 const shareData = { files: [file], title: fileName };
                 if (navigator.canShare(shareData)) {
                     await navigator.share(shareData);
                     return;
                 }
-            } catch (error) { }
+            } catch (error) { /* fallthrough to blob download */ }
         }
-        doc.save(fileName);
+
+        // Blob URL download — funciona em todos os browsers modernos, independente
+        // de doc.save() ter mudado para async no jsPDF 3.x
+        const blobUrl = URL.createObjectURL(pdfBlob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
 
     } catch (error) {
         console.error("Erro PDF:", error);

@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { getBudgets, deleteBudget, toggleBudgetPublic } from "../services/budgetService";
+import { getBudgets, deleteBudget, toggleBudgetPublic, updateBudgetStatus, duplicateBudget, getUserPlan } from "../services/budgetService";
 import { useToast } from "../components/Toast";
 import ConfirmModal from "../components/ConfirmModal";
 
@@ -15,9 +15,24 @@ export default function Budgets() {
   const [sortBy, setSortBy] = useState("date_desc");
   const [viewBudget, setViewBudget] = useState(null); // modal de detalhes
   const [copiedId, setCopiedId] = useState(null); // feedback inline do botão compartilhar
+  const [plan, setPlan] = useState("free");
+  const [statusDropdown, setStatusDropdown] = useState(null); // id do orçamento com dropdown aberto
+  const statusDropdownRef = useRef(null);
 
   useEffect(() => {
     fetchBudgets();
+    getUserPlan().then(setPlan);
+  }, []);
+
+  // Fecha dropdown de status ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target)) {
+        setStatusDropdown(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   async function fetchBudgets() {
@@ -26,6 +41,47 @@ export default function Budgets() {
     setBudgets(data);
     setLoading(false);
   }
+
+  const STATUS_OPTIONS = [
+    { value: null, label: "Pendente", color: "text-gray-500 bg-gray-100" },
+    { value: "accepted", label: "✓ Aceito", color: "text-green-700 bg-green-100" },
+    { value: "rejected", label: "✗ Recusado", color: "text-red-700 bg-red-100" },
+    { value: "in_negotiation", label: "↔ Em Negociação", color: "text-yellow-700 bg-yellow-100" },
+  ];
+
+  const getStatusStyle = (status) => {
+    if (status === "accepted") return "text-green-700 bg-green-100";
+    if (status === "rejected") return "text-red-700 bg-red-100";
+    if (status === "in_negotiation") return "text-yellow-700 bg-yellow-100";
+    return "text-gray-400 bg-gray-100";
+  };
+
+  const getStatusLabel = (status) => {
+    if (status === "accepted") return "✓ Aceito";
+    if (status === "rejected") return "✗ Recusado";
+    if (status === "in_negotiation") return "↔ Em Negociação";
+    return "Pendente";
+  };
+
+  const handleStatusChange = async (budgetId, newStatus) => {
+    setStatusDropdown(null);
+    try {
+      await updateBudgetStatus(budgetId, newStatus);
+      setBudgets((prev) => prev.map((b) => b.id === budgetId ? { ...b, status: newStatus } : b));
+    } catch {
+      toast.error("Erro ao atualizar status.");
+    }
+  };
+
+  const handleDuplicate = async (budget) => {
+    try {
+      const newBudget = await duplicateBudget(budget.id);
+      setBudgets((prev) => [newBudget, ...prev]);
+      toast.success("Orçamento duplicado com sucesso!");
+    } catch {
+      toast.error("Não foi possível duplicar o orçamento.");
+    }
+  };
 
   const filteredBudgets = budgets
     .filter((b) => {
@@ -79,6 +135,10 @@ export default function Budgets() {
   };
 
   const handleShareLink = async (budget) => {
+    if (plan === "free") {
+      toast.warning("Link público é uma funcionalidade PRO. Faça upgrade para compartilhar orçamentos com seus clientes.");
+      return;
+    }
     if (!budget.is_public) {
       try {
         await toggleBudgetPublic(budget.id, true);
@@ -292,12 +352,29 @@ export default function Budgets() {
                           {b.validity_days || 15} dias
                         </span>
                       </td>
-                      <td className="p-4 hidden md:table-cell">
-                        {b.status === "accepted" ? (
-                          <span className="text-xs bg-green-100 text-green-700 font-bold px-2 py-1 rounded-full">✓ Aceito</span>
-                        ) : (
-                          <span className="text-xs bg-gray-100 text-gray-400 px-2 py-1 rounded-full">Pendente</span>
-                        )}
+                      <td className="p-4 hidden md:table-cell relative">
+                        <div className="relative inline-block" ref={statusDropdown === b.id ? statusDropdownRef : null}>
+                          <button
+                            onClick={() => setStatusDropdown(statusDropdown === b.id ? null : b.id)}
+                            className={`text-xs font-bold px-2 py-1 rounded-full cursor-pointer hover:opacity-80 transition ${getStatusStyle(b.status)}`}
+                            title="Alterar status"
+                          >
+                            {getStatusLabel(b.status)} ▾
+                          </button>
+                          {statusDropdown === b.id && (
+                            <div className="absolute left-0 top-8 z-20 bg-white border border-gray-200 rounded-xl shadow-xl py-1 min-w-[160px]">
+                              {STATUS_OPTIONS.map((opt) => (
+                                <button
+                                  key={opt.value ?? "null"}
+                                  onClick={() => handleStatusChange(b.id, opt.value)}
+                                  className={`w-full text-left px-3 py-2 text-xs font-semibold hover:bg-gray-50 transition ${b.status === opt.value || (!b.status && !opt.value) ? "opacity-50 cursor-default" : ""}`}
+                                >
+                                  <span className={`px-2 py-0.5 rounded-full ${opt.color}`}>{opt.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="p-4 text-center">
                         <div className="flex items-center justify-center gap-1">
@@ -337,6 +414,15 @@ export default function Budgets() {
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                               </svg>
                             )}
+                          </button>
+                          <button
+                            onClick={() => handleDuplicate(b)}
+                            className="p-2 text-purple-500 hover:bg-purple-50 rounded-lg transition"
+                            title="Duplicar orçamento"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
                           </button>
                           <button
                             onClick={() => handleDelete(b.id)}

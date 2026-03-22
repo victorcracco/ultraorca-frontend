@@ -1,5 +1,5 @@
 import React, { Suspense } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 // Componentes Globais
 import Layout from "./components/Layout";
@@ -48,6 +48,7 @@ export default function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/update-password" element={<UpdatePassword />} />
+        <Route path="/cadastro" element={<Navigate to="/register" replace />} />
 
         {/* Páginas Legais */}
         <Route path="/terms" element={<Terms />} />

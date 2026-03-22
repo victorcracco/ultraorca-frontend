@@ -206,6 +206,51 @@ export async function acceptBudget(id) {
   return data; // true se aceitou, false se já estava aceito ou não encontrado
 }
 
+export async function updateBudgetStatus(id, status) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado");
+  const { error } = await supabase
+    .from("budgets")
+    .update({ status })
+    .eq("id", id)
+    .eq("user_id", user.id);
+  if (error) throw error;
+}
+
+export async function duplicateBudget(id) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado");
+
+  const { data: original, error: fetchError } = await supabase
+    .from("budgets")
+    .select("client_name, client_address, items, total, layout, primary_color, validity_days")
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .single();
+  if (fetchError) throw fetchError;
+
+  const { data: nextDisplayId } = await supabase
+    .rpc("get_next_display_id", { user_uuid: user.id });
+
+  const { data, error } = await supabase
+    .from("budgets")
+    .insert([{
+      user_id: user.id,
+      display_id: nextDisplayId || 1,
+      client_name: `${original.client_name} (Cópia)`,
+      client_address: original.client_address,
+      items: original.items,
+      total: original.total,
+      layout: original.layout,
+      primary_color: original.primary_color,
+      validity_days: original.validity_days,
+    }])
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 // Busca um orçamento público por ID (sem autenticação)
 // Seleciona apenas as colunas necessárias para exibição — user_id e dados internos nunca são expostos
 export async function getPublicBudget(id) {
