@@ -29,7 +29,7 @@ export default function Budgets() {
 
   const filteredBudgets = budgets
     .filter((b) => {
-      const term = searchTerm.toLowerCase();
+      const term = searchTerm.toLowerCase().replace(/^#/, "");
       return (
         b.client_name?.toLowerCase().includes(term) ||
         String(b.display_id || "").includes(term)

@@ -109,6 +109,23 @@ export default function MyData() {
     }
   };
 
+  // --- VALIDAÇÃO CNPJ ---
+  const validateCNPJ = (cnpj) => {
+    const c = cnpj.replace(/\D/g, '');
+    if (c.length !== 14) return false;
+    if (/^(\d)\1{13}$/.test(c)) return false;
+    const calc = (weights) => {
+      let sum = 0;
+      for (let i = 0; i < weights.length; i++) sum += parseInt(c[i]) * weights[i];
+      const r = sum % 11;
+      return r < 2 ? 0 : 11 - r;
+    };
+    const d1 = calc([5,4,3,2,9,8,7,6,5,4,3,2]);
+    if (d1 !== parseInt(c[12])) return false;
+    const d2 = calc([6,5,4,3,2,9,8,7,6,5,4,3,2]);
+    return d2 === parseInt(c[13]);
+  };
+
   // --- MÁSCARAS ---
   const formatCNPJ = (v) => v.replace(/\D/g, '').replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2').substr(0, 18);
   const formatPhone = (v) => v.replace(/\D/g, '').replace(/(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d)/, '$1-$2').substr(0, 15);
@@ -174,6 +191,15 @@ export default function MyData() {
 
   // --- SALVAR ---
   const handleSave = async () => {
+    if (!formData.company_name.trim()) {
+      toast.error("O nome da empresa é obrigatório.");
+      return;
+    }
+    if (formData.cnpj && !validateCNPJ(formData.cnpj)) {
+      toast.error("CNPJ inválido. Verifique os dígitos e tente novamente.");
+      return;
+    }
+
     setLoading(true);
 
     try {

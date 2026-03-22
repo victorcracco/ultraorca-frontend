@@ -229,7 +229,10 @@ export default function NewBudget() {
   const validateForm = () => {
     if (!client.trim()) { toast.error("Preencha o nome do cliente."); return false; }
     if (items.length === 0) { toast.error("Adicione pelo menos um item."); return false; }
-    if (items.some(i => !i.description)) { toast.error("Preencha a descrição dos itens."); return false; }
+    if (items.some(i => !i.description.trim())) { toast.error("Preencha a descrição de todos os itens."); return false; }
+    if (items.some(i => i.price === "" || i.price === null || i.price === undefined)) { toast.error("Preencha o valor de todos os itens."); return false; }
+    if (items.some(i => Number(i.price) < 0)) { toast.error("O valor dos itens não pode ser negativo."); return false; }
+    if (items.some(i => Number(i.quantity) <= 0)) { toast.error("A quantidade dos itens deve ser maior que zero."); return false; }
     return true;
   };
 

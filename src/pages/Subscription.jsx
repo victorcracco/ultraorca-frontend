@@ -9,6 +9,7 @@ export default function Subscription() {
   const [checkingStatus, setCheckingStatus] = useState(true);
 
   const [userData, setUserData] = useState({ name: "", cpf: "", email: "" });
+  const [cpfError, setCpfError] = useState("");
   const [subscription, setSubscription] = useState(null);
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState("pro");
@@ -51,6 +52,13 @@ export default function Subscription() {
     pro:     { name: "bg-blue-500", text: "text-blue-600", border: "border-blue-500", badge: "bg-blue-500", check: "text-blue-500", btn: "bg-blue-600" },
     annual:  { name: "bg-green-500", text: "text-green-600", border: "border-green-500", badge: "bg-green-500", check: "text-green-500", btn: "bg-green-600" },
   };
+
+  const formatCPF = (v) =>
+    v.replace(/\D/g, "")
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d{1,2})$/, "$1-$2")
+      .substr(0, 14);
 
   const validateCPF = (cpf) => {
     const cleaned = cpf.replace(/\D/g, "");
@@ -147,13 +155,16 @@ export default function Subscription() {
       return;
     }
     if (!userData.cpf) {
+      setCpfError("Por favor, preencha seu CPF.");
       toast.error("Por favor, preencha seu CPF.");
       return;
     }
     if (!validateCPF(userData.cpf)) {
+      setCpfError("CPF inválido. Verifique os dígitos e tente novamente.");
       toast.error("CPF inválido. Verifique os dígitos e tente novamente.");
       return;
     }
+    setCpfError("");
     setShowPaymentModal(true);
   };
 
@@ -497,12 +508,16 @@ export default function Subscription() {
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">CPF</label>
               <input
                 type="text"
-                className="w-full border border-gray-300 rounded-lg p-3 outline-none focus:border-blue-500 transition"
+                className={`w-full border rounded-lg p-3 outline-none focus:border-blue-500 transition ${cpfError ? "border-red-400 bg-red-50" : "border-gray-300"}`}
                 value={userData.cpf}
-                onChange={(e) => setUserData({ ...userData, cpf: e.target.value })}
+                onChange={(e) => {
+                  setCpfError("");
+                  setUserData({ ...userData, cpf: formatCPF(e.target.value) });
+                }}
                 placeholder="000.000.000-00"
                 maxLength={14}
               />
+              {cpfError && <p className="text-red-500 text-xs mt-1 font-medium">{cpfError}</p>}
             </div>
           </div>
 

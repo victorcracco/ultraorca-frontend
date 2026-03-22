@@ -21,6 +21,7 @@ import Privacy from "./pages/legal/Privacy";
 
 // Página pública
 import PublicBudget from "./pages/PublicBudget";
+import NotFound from "./pages/NotFound";
 
 // Páginas da Aplicação (SaaS)
 import Dashboard from "./pages/Dashboard";
@@ -85,6 +86,8 @@ export default function App() {
             </Route>
           </Route>
         </Route>
+        {/* --- 404 CATCH-ALL --- */}
+        <Route path="*" element={<NotFound />} />
       </Routes>
 
       {/* --- BARRA DE NAVEGAÇÃO MOBILE (Fixa no Rodapé) --- */}
