@@ -298,6 +298,23 @@ export default function NewBudget() {
         companyData, validityDays, displayId: displayId || null
       });
       toast.success("PDF gerado com sucesso!");
+
+      // Auto-save silently ao gerar PDF
+      try {
+        if (!budgetId && !editId) {
+          const check = await checkPlanLimit();
+          if (check.allowed) {
+            const newId = await saveBudget({ client, clientAddress, items, total, layout, primaryColor, validityDays });
+            setBudgetId(newId);
+            localStorage.removeItem("budget_draft");
+          }
+        } else {
+          await saveBudget({ id: budgetId || editId, client, clientAddress, items, total, layout, primaryColor, validityDays });
+          localStorage.removeItem("budget_draft");
+        }
+      } catch {
+        // silencioso — PDF já foi gerado
+      }
     } catch (error) {
       console.error("Erro PDF:", error);
       toast.error("Erro ao gerar o PDF. Verifique os dados e tente novamente.");
