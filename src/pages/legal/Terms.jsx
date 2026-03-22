@@ -41,11 +41,11 @@ export default function Terms() {
 
           <h3 className="text-xl font-semibold text-gray-800 mt-6">3. Pagamentos e Cancelamento</h3>
           <p>
-            Oferecemos planos de assinatura (Mensais ou Anuais). A cobrança é recorrente (automática no cartão ou via envio de boleto/pix).
+            Oferecemos planos de assinatura mensais e anuais. O pagamento é processado via <strong>Asaas</strong>, com as opções de cartão de crédito ou PIX.
           </p>
           <ul className="list-disc pl-5 space-y-2">
-            <li><strong>Cancelamento:</strong> Você pode cancelar a qualquer momento pelo painel do usuário. O cancelamento interrompe a renovação futura, mas o acesso permanece ativo até o fim do período já pago.</li>
-            <li><strong>Reembolso:</strong> Não oferecemos reembolso para períodos parciais não utilizados (ex: cancelamento no meio do mês), exceto nos casos previstos pelo Código de Defesa do Consumidor (7 dias após a primeira compra).</li>
+            <li><strong>Cancelamento:</strong> Você pode cancelar a qualquer momento pelo painel do usuário. O cancelamento é imediato e interrompe a renovação futura.</li>
+            <li><strong>Reembolso:</strong> Não oferecemos reembolso para períodos parciais não utilizados, exceto nos casos previstos pelo Código de Defesa do Consumidor (direito de arrependimento em até 7 dias após a primeira contratação).</li>
           </ul>
 
           <h3 className="text-xl font-semibold text-gray-800 mt-6">4. Propriedade Intelectual</h3>

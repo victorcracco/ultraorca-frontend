@@ -35,9 +35,10 @@ export default function Privacy() {
             <strong>Nós NÃO armazenamos dados completos do seu cartão de crédito.</strong>
           </p>
           <p>
-            Para processar pagamentos, utilizamos gateways seguros de nível mundial: <strong>Stripe</strong> (para cartões) e <strong>Asaas</strong> (para PIX/Boletos).
-            Quando você assina um plano, seus dados de pagamento são enviados diretamente e de forma criptografada para estes parceiros.
-            O {APP_NAME} recebe apenas a confirmação de que o pagamento foi realizado e tokens de segurança para renovação.
+            Para processar pagamentos, utilizamos a plataforma <strong>Asaas</strong> (cartão de crédito e PIX),
+            operada pela Asaas Gestão Financeira Instituição de Pagamento S.A., regulamentada pelo Banco Central do Brasil.
+            Quando você assina um plano, seus dados de pagamento são enviados diretamente e de forma criptografada para este parceiro.
+            O {APP_NAME} recebe apenas a confirmação de que o pagamento foi realizado.
           </p>
 
           <h3 className="text-xl font-semibold text-gray-800 mt-6">3. Uso das Informações</h3>
@@ -50,7 +51,7 @@ export default function Privacy() {
             Seus dados pessoais nunca são vendidos. Compartilhamos estritamente o necessário com:
           </p>
           <ul className="list-disc pl-5 space-y-2">
-            <li><strong>Processadores de Pagamento:</strong> Stripe e Asaas, para viabilizar as cobranças.</li>
+            <li><strong>Processador de Pagamento:</strong> Asaas, para viabilizar as cobranças via cartão e PIX.</li>
             <li><strong>Infraestrutura:</strong> Servidores de hospedagem seguros (como Vercel e Supabase) para manter o site online.</li>
           </ul>
 
