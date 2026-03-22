@@ -40,17 +40,17 @@ export default function Tutorials() {
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
         {tutorials.map((video) => (
           <div key={video.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
-            <div className="aspect-video bg-gray-100 relative group">
-              <iframe
-                className="w-full h-full"
-                src={`https://www.youtube.com/embed/${video.videoId}`}
-                title={video.title}
-                frameBorder="0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              ></iframe>
+            <div className="aspect-video bg-gradient-to-br from-blue-900 to-slate-800 relative flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3 text-white/80">
+                <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-white ml-1" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </div>
+                <span className="text-xs font-medium text-white/60">Em breve</span>
+              </div>
             </div>
-            
+
             <div className="p-5">
               <div className="flex justify-between items-start mb-2">
                 <h3 className="font-bold text-gray-800 text-lg leading-tight">{video.title}</h3>

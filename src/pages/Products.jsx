@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../services/supabase";
+import { getUserPlan } from "../services/budgetService";
 
 /**
  * C1 FIX: Produtos agora são salvos no Supabase (tabela `products`),
@@ -24,6 +25,15 @@ export default function Products() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [plan, setPlan] = useState("free");
+  const [planLoading, setPlanLoading] = useState(true);
+
+  useEffect(() => {
+    getUserPlan().then((p) => {
+      setPlan(p);
+      setPlanLoading(false);
+    });
+  }, []);
 
   // Estados do Formulário
   const [name, setName] = useState("");
@@ -137,6 +147,41 @@ export default function Products() {
       showFeedback("Erro ao excluir itens.", "error");
     }
   };
+
+  if (planLoading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-100 border-t-blue-600" />
+      </div>
+    );
+  }
+
+  if (plan === "free") {
+    return (
+      <div className="max-w-5xl mx-auto p-6 pb-24">
+        <div className="flex items-center gap-4 mb-8">
+          <Link to="/app" className="text-gray-500 hover:text-gray-700">&larr; Voltar</Link>
+          <h1 className="text-2xl font-bold text-gray-800">Catálogo</h1>
+        </div>
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="bg-yellow-100 text-yellow-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 text-4xl shadow">
+            🔒
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-3">Funcionalidade exclusiva dos planos pagos</h2>
+          <p className="text-gray-500 max-w-md mb-8">
+            O cadastro de produtos e serviços está disponível a partir do plano <strong>Iniciante</strong>.
+            Salve seus itens mais usados e agilize a criação de orçamentos.
+          </p>
+          <Link
+            to="/app/subscription"
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-8 py-4 rounded-xl shadow-lg transition active:scale-95"
+          >
+            Ver planos e fazer upgrade
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto p-6 pb-24">

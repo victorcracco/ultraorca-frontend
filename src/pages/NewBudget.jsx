@@ -96,6 +96,7 @@ export default function NewBudget() {
 
           if (!check.allowed) {
             setIsLimitReached(true);
+            localStorage.removeItem("budget_draft");
 
             if (check.plan === 'free') {
               setLimitDetails({

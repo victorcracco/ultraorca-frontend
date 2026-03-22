@@ -267,6 +267,9 @@ export default function Register() {
                   value={formData.confirmPassword}
                   onChange={handleChange}
                 />
+                {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                  <p className="text-red-500 text-xs mt-1 font-medium">As senhas não conferem.</p>
+                )}
               </div>
             </div>
 

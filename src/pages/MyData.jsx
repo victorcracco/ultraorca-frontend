@@ -43,18 +43,27 @@ export default function MyData() {
 
       if (profile) {
         setFormData({
-          company_name: profile.company_name || "",
+          company_name: profile.company_name || user.user_metadata?.company_name || "",
           cnpj: profile.cnpj || "",
-          phone: profile.phone || "",
+          phone: profile.phone || user.user_metadata?.whatsapp || "",
           cep: profile.cep || "",
           street: profile.street || "",
           number: profile.number || "",
           neighborhood: profile.neighborhood || "",
           city: profile.city || "",
           state: profile.state || "",
-          logo_url: profile.logo_url || null
+          logo_url: profile.logo_url || user.user_metadata?.avatar_url || null
         });
-        setPreviewUrl(profile.logo_url);
+        setPreviewUrl(profile.logo_url || user.user_metadata?.avatar_url || null);
+      } else {
+        // Perfil ainda não existe — usa dados do cadastro
+        setFormData(prev => ({
+          ...prev,
+          company_name: user.user_metadata?.company_name || "",
+          phone: user.user_metadata?.whatsapp || "",
+          logo_url: user.user_metadata?.avatar_url || null,
+        }));
+        setPreviewUrl(user.user_metadata?.avatar_url || null);
       }
     } else {
       // 2. Fallback: LocalStorage

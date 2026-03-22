@@ -13,6 +13,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
 
   // Se não há chave configurada, captcha é ignorado (dev/sem chave)
   const [captchaToken, setCaptchaToken] = useState(RECAPTCHA_KEY ? null : "bypass");
@@ -27,6 +28,7 @@ export default function Login() {
     }
 
     setLoading(true);
+    setLoginError("");
 
     try {
       const { error } = await supabase.auth.signInWithPassword({
@@ -40,7 +42,9 @@ export default function Login() {
 
     } catch (error) {
       console.error("Erro login:", error);
-      toast.error("E-mail ou senha incorretos. Verifique seus dados.");
+      const msg = "E-mail ou senha incorretos. Verifique seus dados.";
+      setLoginError(msg);
+      toast.error(msg);
 
       if (captchaRef.current) captchaRef.current.reset();
       setCaptchaToken(RECAPTCHA_KEY ? null : "bypass");
@@ -80,6 +84,14 @@ export default function Login() {
           <p className="text-gray-500 mb-8">Acesse sua conta para gerenciar seus orçamentos.</p>
 
           <form onSubmit={handleLogin} className="space-y-5">
+            {loginError && (
+              <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm font-medium px-4 py-3 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                </svg>
+                {loginError}
+              </div>
+            )}
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-1">E-mail</label>
               <input
@@ -88,7 +100,7 @@ export default function Login() {
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition"
                 placeholder="seu@email.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => { setEmail(e.target.value); setLoginError(""); }}
               />
             </div>
 
@@ -105,7 +117,7 @@ export default function Login() {
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition"
                 placeholder="Sua senha"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => { setPassword(e.target.value); setLoginError(""); }}
               />
             </div>
 
