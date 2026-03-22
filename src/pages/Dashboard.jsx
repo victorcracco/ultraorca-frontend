@@ -28,7 +28,7 @@ export default function Dashboard() {
   }, [searchParams]);
 
   // Tutorial
-  const startTutorial = () => {
+  const startTutorial = (userId) => {
     const driverObj = driver({
       showProgress: true,
       nextBtnText: "Próximo →",
@@ -42,6 +42,9 @@ export default function Dashboard() {
       ],
       onDestroyStarted: () => {
         localStorage.setItem("tutorial_v1_completed", "true");
+        if (userId) {
+          supabase.from("profiles").update({ onboarding_completed: true }).eq("id", userId);
+        }
         driverObj.destroy();
       },
     });
@@ -49,9 +52,12 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    if (!loading && !localStorage.getItem("tutorial_v1_completed")) {
-      const timer = setTimeout(() => startTutorial(), 600);
-      return () => clearTimeout(timer);
+    if (!loading) {
+      const localDone = localStorage.getItem("tutorial_v1_completed");
+      if (!localDone) {
+        const timer = setTimeout(() => startTutorial(), 600);
+        return () => clearTimeout(timer);
+      }
     }
   }, [loading]);
 
@@ -60,8 +66,16 @@ export default function Dashboard() {
     async function loadData() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data: profile } = await supabase.from("profiles").select("company_name").eq("id", user.id).single();
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("company_name, onboarding_completed")
+          .eq("id", user.id)
+          .single();
         setEmpresa(profile?.company_name || user.user_metadata?.full_name || user.email.split("@")[0]);
+        // Marca no localStorage se o DB diz que já completou (sincroniza entre dispositivos)
+        if (profile?.onboarding_completed) {
+          localStorage.setItem("tutorial_v1_completed", "true");
+        }
       }
       await fetchBudgets();
     }

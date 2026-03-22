@@ -14,6 +14,7 @@ export default function Budgets() {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [sortBy, setSortBy] = useState("date_desc");
   const [viewBudget, setViewBudget] = useState(null); // modal de detalhes
+  const [copiedId, setCopiedId] = useState(null); // feedback inline do botão compartilhar
 
   useEffect(() => {
     fetchBudgets();
@@ -96,6 +97,8 @@ export default function Budgets() {
       }
     } catch (e) {}
     toast.success("Link copiado! Compartilhe com seu cliente.");
+    setCopiedId(budget.id);
+    setTimeout(() => setCopiedId(null), 3000);
   };
 
   const totalValue = filteredBudgets.reduce((acc, b) => acc + Number(b.total || 0), 0);
@@ -319,12 +322,21 @@ export default function Budgets() {
                           </button>
                           <button
                             onClick={() => handleShareLink(b)}
-                            className={`p-2 rounded-lg transition ${b.is_public ? "text-green-600 hover:bg-green-50" : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"}`}
+                            className={`flex items-center gap-1 px-2 py-1.5 rounded-lg transition text-xs font-semibold ${copiedId === b.id ? "bg-green-100 text-green-700" : b.is_public ? "text-green-600 hover:bg-green-50" : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"}`}
                             title={b.is_public ? "Link ativo — copiar" : "Gerar link público"}
                           >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                            </svg>
+                            {copiedId === b.id ? (
+                              <>
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                                <span>Copiado!</span>
+                              </>
+                            ) : (
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                              </svg>
+                            )}
                           </button>
                           <button
                             onClick={() => handleDelete(b.id)}
