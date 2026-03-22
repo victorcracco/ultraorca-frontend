@@ -6,6 +6,7 @@ import { useToast } from "../components/Toast";
 export default function MyData() {
   const toast = useToast();
   const [loading, setLoading] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [cepLoading, setCepLoading] = useState(false);
 
   // Estado para os campos separados
@@ -215,6 +216,8 @@ export default function MyData() {
         logo: formData.logo_url
       }));
 
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
       toast.success("Dados salvos com sucesso!");
 
     } catch (error) {
@@ -324,9 +327,18 @@ export default function MyData() {
           <button
             onClick={handleSave}
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition transform active:scale-95 flex justify-center items-center gap-2"
+            className={`w-full text-white text-lg font-bold py-4 rounded-xl shadow-lg transition transform active:scale-95 flex justify-center items-center gap-2 ${saveSuccess ? "bg-green-600 hover:bg-green-700" : "bg-blue-600 hover:bg-blue-700 hover:shadow-xl"}`}
           >
-            {loading ? <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div> : "Salvar Alterações"}
+            {loading ? (
+              <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div>
+            ) : saveSuccess ? (
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                Dados Salvos!
+              </>
+            ) : "Salvar Alterações"}
           </button>
 
         </div>

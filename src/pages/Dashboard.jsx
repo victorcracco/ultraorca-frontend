@@ -49,8 +49,11 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    if (!localStorage.getItem("tutorial_v1_completed")) setTimeout(() => startTutorial(), 1000);
-  }, []);
+    if (!loading && !localStorage.getItem("tutorial_v1_completed")) {
+      const timer = setTimeout(() => startTutorial(), 600);
+      return () => clearTimeout(timer);
+    }
+  }, [loading]);
 
   // Carregamento
   useEffect(() => {

@@ -42,6 +42,7 @@ export default function NewBudget() {
   const [userPlan, setUserPlan] = useState("free");
   const [isLimitReached, setIsLimitReached] = useState(false);
   const [limitDetails, setLimitDetails] = useState({ title: "", msg: "" });
+  const [draftRestored, setDraftRestored] = useState(false);
 
   const colorOptions = [
     { name: "Azul", value: "#2563eb" },
@@ -120,6 +121,7 @@ export default function NewBudget() {
                   setClientAddress(parsedDraft.clientAddress || "");
                   setItems(parsedDraft.items || []);
                   if (parsedDraft.primaryColor) setPrimaryColor(parsedDraft.primaryColor);
+                  setDraftRestored(true);
                 }
               } catch (e) { }
             }
@@ -375,6 +377,28 @@ export default function NewBudget() {
             <Link to="/app/subscription" className="block w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg mb-3">Ver Planos</Link>
             <button onClick={() => setShowUpgradeModal(false)} className="text-gray-400 text-sm underline">Cancelar</button>
           </div>
+        </div>
+      )}
+
+      {/* Banner de rascunho restaurado */}
+      {draftRestored && (
+        <div className="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 text-amber-800 text-sm font-medium px-4 py-3 rounded-xl mb-4">
+          <span className="flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Rascunho anterior restaurado automaticamente.
+          </span>
+          <button
+            onClick={() => {
+              setClient(""); setClientAddress(""); setItems([]);
+              localStorage.removeItem("budget_draft");
+              setDraftRestored(false);
+            }}
+            className="text-amber-600 hover:text-amber-800 font-bold text-xs underline whitespace-nowrap"
+          >
+            Limpar e começar do zero
+          </button>
         </div>
       )}
 

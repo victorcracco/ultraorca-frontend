@@ -90,7 +90,11 @@ export default function Budgets() {
       }
     }
     const link = `${window.location.origin}/orcamento/${budget.id}`;
-    await navigator.clipboard.writeText(link).catch(() => {});
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(link);
+      }
+    } catch (e) {}
     toast.success("Link copiado! Compartilhe com seu cliente.");
   };
 
