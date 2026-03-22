@@ -175,12 +175,10 @@ export default function Budgets() {
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const acceptedLast30Value = budgets
-    .filter((b) => b.status === "accepted" && new Date(b.created_at) >= thirtyDaysAgo)
-    .reduce((acc, b) => acc + Number(b.total || 0), 0);
-  const rejectedLast30Count = budgets
-    .filter((b) => b.status === "rejected" && new Date(b.created_at) >= thirtyDaysAgo)
-    .length;
+  const acceptedLast30 = budgets.filter((b) => b.status === "accepted" && new Date(b.created_at) >= thirtyDaysAgo);
+  const acceptedLast30Value = acceptedLast30.reduce((acc, b) => acc + Number(b.total || 0), 0);
+  const rejectedLast30 = budgets.filter((b) => b.status === "rejected" && new Date(b.created_at) >= thirtyDaysAgo);
+  const rejectedLast30Value = rejectedLast30.reduce((acc, b) => acc + Number(b.total || 0), 0);
 
   return (
     <div className="max-w-7xl mx-auto p-6 pb-24 space-y-6">
@@ -285,15 +283,17 @@ export default function Budgets() {
           </div>
           <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4">
             <p className="text-xs text-emerald-600 font-medium mb-1">✓ Aceitos (30d)</p>
-            <p className="text-xl font-bold text-emerald-700">
+            <p className="text-lg font-bold text-emerald-700">
               {acceptedLast30Value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
             </p>
-            <p className="text-xs text-emerald-400">valor aceito</p>
+            <p className="text-xs text-emerald-500 mt-0.5">{acceptedLast30.length} orçamento{acceptedLast30.length !== 1 ? "s" : ""}</p>
           </div>
           <div className="bg-red-50 border border-red-100 rounded-2xl p-4">
             <p className="text-xs text-red-600 font-medium mb-1">✗ Recusados (30d)</p>
-            <p className="text-2xl font-bold text-red-700">{rejectedLast30Count}</p>
-            <p className="text-xs text-red-400">orçamentos</p>
+            <p className="text-lg font-bold text-red-700">
+              {rejectedLast30Value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+            </p>
+            <p className="text-xs text-red-500 mt-0.5">{rejectedLast30.length} orçamento{rejectedLast30.length !== 1 ? "s" : ""}</p>
           </div>
         </div>
       )}
