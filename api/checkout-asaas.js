@@ -6,10 +6,6 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-/**
- * C4 FIX: Valida o JWT do usuário antes de criar a assinatura Asaas.
- * O userId agora vem do token JWT, não do body da requisição.
- */
 export default async function handler(req, res) {
   if (handlePreflight(req, res)) return;
   if (req.method !== "POST") return res.status(405).end();
@@ -29,10 +25,10 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "Sessão inválida ou expirada." });
   }
 
-  const { name, cpf, email, planId } = req.body;
-  const userId = user.id; // Usa o ID do JWT, não do body
+  const { name, cpf, email, planId, paymentMethod } = req.body;
+  const userId = user.id;
 
-  // Validação server-side dos campos obrigatórios
+  // Validação server-side
   if (!name || typeof name !== "string" || name.trim().length < 3) {
     return res.status(400).json({ error: "Nome inválido." });
   }
@@ -43,6 +39,9 @@ export default async function handler(req, res) {
   if (cpfClean.length !== 11 || /^(\d)\1{10}$/.test(cpfClean)) {
     return res.status(400).json({ error: "CPF inválido." });
   }
+
+  const BILLING_TYPES = ["CREDIT_CARD", "PIX"];
+  const billingType = BILLING_TYPES.includes(paymentMethod) ? paymentMethod : "PIX";
 
   const apiKey = process.env.ASAAS_API_KEY;
   const apiUrl = process.env.ASAAS_URL || "https://www.asaas.com/api/v3";
@@ -69,7 +68,6 @@ export default async function handler(req, res) {
     const clientData = await clientResponse.json();
     let customerId = clientData.id;
 
-    // Tratamento se e-mail já existe no Asaas
     if (clientData.errors) {
       if (clientData.errors[0].code === "CUSTOMER_EMAIL_ALREADY_EXIST") {
         const search = await fetch(`${apiUrl}/customers?email=${email}`, {
@@ -82,9 +80,7 @@ export default async function handler(req, res) {
           throw new Error("Email duplicado no Asaas e não recuperável.");
         }
       } else {
-        throw new Error(
-          `Erro Cliente Asaas: ${clientData.errors[0].description}`
-        );
+        throw new Error(`Erro Cliente Asaas: ${clientData.errors[0].description}`);
       }
     }
 
@@ -94,7 +90,7 @@ export default async function handler(req, res) {
       headers: { "Content-Type": "application/json", access_token: apiKey },
       body: JSON.stringify({
         customer: customerId,
-        billingType: "BOLETO",
+        billingType,
         value: prices[planId],
         nextDueDate: new Date().toISOString().split("T")[0],
         cycle: planId === "annual" ? "YEARLY" : "MONTHLY",
@@ -106,9 +102,7 @@ export default async function handler(req, res) {
     const subData = await subscriptionResponse.json();
 
     if (subData.errors) {
-      throw new Error(
-        `Erro Assinatura Asaas: ${subData.errors[0].description}`
-      );
+      throw new Error(`Erro Assinatura Asaas: ${subData.errors[0].description}`);
     }
 
     const subscriptionId = subData.id;
@@ -125,13 +119,11 @@ export default async function handler(req, res) {
     const paymentsData = await paymentsResponse.json();
 
     if (!paymentsData.data || paymentsData.data.length === 0) {
-      throw new Error(
-        "Assinatura criada, mas nenhuma cobrança foi gerada imediatamente."
-      );
+      throw new Error("Assinatura criada, mas nenhuma cobrança foi gerada.");
     }
 
     const firstPayment = paymentsData.data[0];
-    const finalUrl = firstPayment.bankSlipUrl || firstPayment.invoiceUrl;
+    const finalUrl = firstPayment.invoiceUrl;
 
     return res.status(200).json({ invoiceUrl: finalUrl });
   } catch (error) {

@@ -169,9 +169,9 @@ export default function Subscription() {
   };
 
   // =========================================================
-  // 3. PROCESSAMENTO DE PAGAMENTO
+  // 3. PROCESSAMENTO DE PAGAMENTO (100% Asaas)
   // =========================================================
-  const processPayment = async (method) => {
+  const processPayment = async (paymentMethod) => {
     setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -182,12 +182,10 @@ export default function Subscription() {
         name: userData.name,
         cpf: userData.cpf,
         planId: selectedPlan.id,
-        isUpgrade: isUpgrading,
+        paymentMethod, // "CREDIT_CARD" ou "PIX"
       };
 
-      const endpoint = method === "stripe" ? "/api/checkout-stripe" : "/api/checkout-asaas";
-
-      const response = await fetch(endpoint, {
+      const response = await fetch("/api/checkout-asaas", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -206,12 +204,10 @@ export default function Subscription() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Falha ao processar pagamento");
 
-      if (method === "stripe") {
-        if (data.url) window.location.href = data.url;
-        else throw new Error("Link do Stripe não gerado.");
-      } else if (method === "asaas") {
-        if (data.invoiceUrl) window.location.href = data.invoiceUrl;
-        else throw new Error("Link do boleto/pix não gerado pelo Asaas.");
+      if (data.invoiceUrl) {
+        window.location.href = data.invoiceUrl;
+      } else {
+        throw new Error("Link de pagamento não gerado. Tente novamente.");
       }
     } catch (error) {
       console.error(error);
@@ -281,7 +277,6 @@ export default function Subscription() {
       : "starter";
     const currentPlanName = plans[planKey]?.name || subscription.plan_type;
     const isStarter = subscription.plan_type === "starter";
-    const providerName = subscription.provider === "stripe" ? "Cartão de Crédito" : "Boleto/Pix Asaas";
 
     return (
       <>
@@ -311,7 +306,7 @@ export default function Subscription() {
                       </span>
                     )}
                   </div>
-                  <p className="text-gray-500 text-sm">Gerenciado via {providerName}</p>
+                  <p className="text-gray-500 text-sm">Gerenciado via Asaas</p>
                   {subscription.updated_at && (
                     <p className="text-xs text-gray-400 mt-1">
                       Última atualização: {new Date(subscription.updated_at).toLocaleDateString("pt-BR")}
@@ -383,31 +378,31 @@ export default function Subscription() {
               >✕</button>
 
               <h2 className="text-xl font-bold text-gray-800 mb-2">Forma de Pagamento</h2>
-              <p className="text-gray-500 mb-6 text-sm">Escolha como deseja manter sua assinatura.</p>
+              <p className="text-gray-500 mb-6 text-sm">Escolha como deseja pagar sua assinatura.</p>
 
               <div className="space-y-3">
                 <button
-                  onClick={() => processPayment("stripe")}
+                  onClick={() => processPayment("CREDIT_CARD")}
                   disabled={loading}
-                  className="w-full border-2 border-blue-600 bg-blue-50 hover:bg-blue-100 p-4 rounded-xl flex items-center justify-between transition group"
+                  className="w-full border-2 border-blue-600 bg-blue-50 hover:bg-blue-100 p-4 rounded-xl flex items-center justify-between transition"
                 >
                   <div className="text-left">
                     <span className="block font-bold text-blue-700">Cartão de Crédito</span>
-                    <span className="text-xs text-blue-600">Liberação imediata + Renovação automática</span>
+                    <span className="text-xs text-blue-500">Liberação imediata · Renovação automática</span>
                   </div>
                   <div className="text-2xl">💳</div>
                 </button>
 
                 <button
-                  onClick={() => processPayment("asaas")}
+                  onClick={() => processPayment("PIX")}
                   disabled={loading}
                   className="w-full border-2 border-gray-200 hover:border-green-500 hover:bg-green-50 p-4 rounded-xl flex items-center justify-between transition"
                 >
                   <div className="text-left">
-                    <span className="block font-bold text-gray-700">Pix ou Boleto</span>
-                    <span className="text-xs text-gray-500">Código enviado mensalmente</span>
+                    <span className="block font-bold text-gray-700">PIX</span>
+                    <span className="text-xs text-gray-500">Pagamento instantâneo · QR Code gerado agora</span>
                   </div>
-                  <div className="text-2xl">💠</div>
+                  <div className="text-2xl">⚡</div>
                 </button>
               </div>
 
