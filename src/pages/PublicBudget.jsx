@@ -9,6 +9,7 @@ export default function PublicBudget() {
   const [notFound, setNotFound] = useState(false);
   const [accepting, setAccepting] = useState(false);
   const [accepted, setAccepted] = useState(false);
+  const [expired, setExpired] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -21,8 +22,8 @@ export default function PublicBudget() {
         const expiry = new Date(issueDate);
         expiry.setDate(expiry.getDate() + (data.validity_days || 15));
         if (new Date() > expiry && data.status !== "accepted") {
-          // Expirado e não aceito: trata como não encontrado
-          setNotFound(true);
+          setExpired(true);
+          setBudget(data);
         } else {
           setBudget(data);
           if (data.status === "accepted") setAccepted(true);
@@ -60,7 +61,19 @@ export default function PublicBudget() {
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-center">
         <div className="text-6xl mb-4">🔍</div>
         <h1 className="text-2xl font-bold text-gray-800 mb-2">Orçamento não encontrado</h1>
-        <p className="text-gray-500 mb-6">Este link pode ter expirado ou o orçamento não é público.</p>
+        <p className="text-gray-500 mb-6">Este link não existe ou o orçamento não é público.</p>
+        <Link to="/" className="text-blue-600 hover:underline font-medium">Voltar ao início</Link>
+      </div>
+    );
+  }
+
+  if (expired && budget) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-center">
+        <div className="text-6xl mb-4">⏰</div>
+        <h1 className="text-2xl font-bold text-gray-800 mb-2">Orçamento expirado</h1>
+        <p className="text-gray-500 mb-2">O orçamento <strong>#{budget.display_id}</strong> para <strong>{budget.client_name}</strong> não está mais disponível.</p>
+        <p className="text-gray-400 text-sm mb-6">Entre em contato com o fornecedor para solicitar um novo orçamento.</p>
         <Link to="/" className="text-blue-600 hover:underline font-medium">Voltar ao início</Link>
       </div>
     );
