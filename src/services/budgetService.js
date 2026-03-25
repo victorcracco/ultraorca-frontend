@@ -134,6 +134,7 @@ export async function saveBudget(budgetData) {
         layout: budgetData.layout,
         primary_color: budgetData.primaryColor,
         validity_days: parseInt(budgetData.validityDays),
+        status: "pending",
       },
     ])
     .select()

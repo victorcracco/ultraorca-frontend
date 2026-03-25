@@ -43,7 +43,7 @@ export default function Budgets() {
   }
 
   const STATUS_OPTIONS = [
-    { value: null, label: "Pendente", color: "text-gray-500 bg-gray-100" },
+    { value: "pending", label: "Pendente", color: "text-gray-500 bg-gray-100" },
     { value: "accepted", label: "✓ Aceito", color: "text-green-700 bg-green-100" },
     { value: "rejected", label: "✗ Recusado", color: "text-red-700 bg-red-100" },
     { value: "in_negotiation", label: "↔ Em Negociação", color: "text-yellow-700 bg-yellow-100" },
