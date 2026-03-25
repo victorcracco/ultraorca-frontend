@@ -90,7 +90,7 @@ export default function Layout() {
 
       <div className="p-4 border-t border-gray-100 space-y-1">
         <div className="flex items-center gap-2 px-4 py-2">
-          <NotificationBell />
+          <NotificationBell dropUp={true} />
           <span className="text-sm text-gray-500 font-medium">Notificações</span>
         </div>
         <button

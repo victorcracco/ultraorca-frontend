@@ -1,40 +1,46 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../services/supabase";
-import {
-  getNotifications,
-  markAsRead,
-  markAllAsRead,
-  subscribeToNotifications,
-} from "../services/notificationService";
+import { getNotifications, markAsRead, markAllAsRead } from "../services/notificationService";
 
-export default function NotificationBell() {
+export default function NotificationBell({ dropUp = false }) {
   const [notifications, setNotifications] = useState([]);
   const [open, setOpen] = useState(false);
-  const [userId, setUserId] = useState(null);
   const ref = useRef(null);
   const navigate = useNavigate();
 
   const unread = notifications.filter((n) => !n.read).length;
 
   useEffect(() => {
+    let channel;
+
     async function init() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      setUserId(user.id);
+
       const data = await getNotifications();
       setNotifications(data);
-    }
-    init();
-  }, []);
 
-  useEffect(() => {
-    if (!userId) return;
-    const channel = subscribeToNotifications(userId, (newNotif) => {
-      setNotifications((prev) => [newNotif, ...prev]);
-    });
-    return () => supabase.removeChannel(channel);
-  }, [userId]);
+      // Realtime — escuta INSERT na tabela notifications
+      channel = supabase
+        .channel("notifications_" + user.id)
+        .on("postgres_changes", {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${user.id}`,
+        }, (payload) => {
+          setNotifications((prev) => [payload.new, ...prev]);
+        })
+        .subscribe();
+    }
+
+    init();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -52,7 +58,7 @@ export default function NotificationBell() {
       );
     }
     setOpen(false);
-    if (notif.budget_id) navigate(`/app/budgets`);
+    if (notif.budget_id) navigate("/app/budgets");
   };
 
   const handleMarkAll = async () => {
@@ -92,7 +98,7 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-10 w-80 bg-white border border-gray-200 rounded-2xl shadow-xl z-50 overflow-hidden">
+        <div className={`absolute left-0 w-80 bg-white border border-gray-200 rounded-2xl shadow-xl z-50 overflow-hidden ${dropUp ? "bottom-full mb-2" : "top-10"}`}>
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <p className="font-bold text-gray-800 text-sm">Notificações</p>
             {unread > 0 && (
