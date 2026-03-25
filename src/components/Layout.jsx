@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { NavLink, Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../services/supabase";
+import NotificationBell from "./NotificationBell";
 
 export default function Layout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -87,7 +88,11 @@ export default function Layout() {
         )}
       </nav>
 
-      <div className="p-4 border-t border-gray-100">
+      <div className="p-4 border-t border-gray-100 space-y-1">
+        <div className="flex items-center gap-2 px-4 py-2">
+          <NotificationBell />
+          <span className="text-sm text-gray-500 font-medium">Notificações</span>
+        </div>
         <button
           onClick={handleLogout}
           className="w-full flex items-center gap-3 px-4 py-2 text-sm font-medium text-gray-500 hover:text-red-600 transition-colors rounded-lg hover:bg-red-50"
@@ -145,9 +150,12 @@ export default function Layout() {
 
           <span className="font-bold text-lg text-blue-900 truncate mx-2">UltraOrça</span>
 
-          <Link to="/app/new-budget" className="bg-blue-600 text-white w-8 h-8 flex items-center justify-center rounded-lg font-bold shadow-md active:scale-95 transition-transform">
-            +
-          </Link>
+          <div className="flex items-center gap-1">
+            <NotificationBell />
+            <Link to="/app/new-budget" className="bg-blue-600 text-white w-8 h-8 flex items-center justify-center rounded-lg font-bold shadow-md active:scale-95 transition-transform">
+              +
+            </Link>
+          </div>
         </div>
 
         <Outlet />
