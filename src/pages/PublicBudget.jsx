@@ -105,7 +105,7 @@ export default function PublicBudget() {
   const items = Array.isArray(budget.items) ? budget.items : [];
   const total = Number(budget.total || 0);
   const profile = budget.profiles || {};
-  const isPro = profile.plan_type && profile.plan_type !== "free";
+  const isPro = budget.is_pro === true;
 
   return (
     <div className="min-h-screen bg-gray-100 py-8 px-4">
@@ -126,9 +126,10 @@ export default function PublicBudget() {
               <div className="min-w-0">
                 <p className="font-bold text-gray-900 text-lg leading-tight">{profile.company_name}</p>
                 <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
-                  {profile.phone && <p className="text-sm text-gray-500">📞 {profile.phone}</p>}
+                  {profile.phone && <p className="text-sm text-gray-500">{profile.phone}</p>}
                   {profile.cnpj && <p className="text-sm text-gray-500">CNPJ: {profile.cnpj}</p>}
                 </div>
+                {profile.address && <p className="text-xs text-gray-400 mt-1">{profile.address}</p>}
               </div>
             </div>
           )}

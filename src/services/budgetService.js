@@ -269,14 +269,14 @@ export async function getPublicBudget(id) {
     .single();
   if (error) return null;
 
-  // Busca dados da empresa separadamente
+  // Busca dados da empresa e plano separadamente
   if (data?.user_id) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("company_name, logo_url, phone, cnpj, plan_type")
-      .eq("id", data.user_id)
-      .single();
+    const [{ data: profile }, { data: sub }] = await Promise.all([
+      supabase.from("profiles").select("company_name, logo_url, phone, cnpj, address").eq("id", data.user_id).single(),
+      supabase.from("subscriptions").select("plan_type, status").eq("user_id", data.user_id).in("status", ["active", "trialing", "canceling"]).maybeSingle(),
+    ]);
     data.profiles = profile || null;
+    data.is_pro = !!(sub && sub.plan_type && sub.plan_type !== "free");
     delete data.user_id;
   }
 
