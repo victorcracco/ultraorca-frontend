@@ -119,17 +119,15 @@ export default function PublicBudget() {
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
           {/* Dados da empresa */}
           {profile.company_name && (
-            <div className="px-6 pt-5 pb-4 border-b border-gray-100 flex items-center gap-4">
+            <div className="px-6 pt-5 pb-4 border-b border-gray-100 flex items-start gap-4">
               {profile.logo_url && (
                 <img src={profile.logo_url} alt="Logo" className="h-14 w-14 rounded-xl object-contain border border-gray-100 bg-white shrink-0" />
               )}
-              <div className="min-w-0">
+              <div className="min-w-0 space-y-0.5">
                 <p className="font-bold text-gray-900 text-lg leading-tight">{profile.company_name}</p>
-                <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
-                  {profile.phone && <p className="text-sm text-gray-500">{profile.phone}</p>}
-                  {profile.cnpj && <p className="text-sm text-gray-500">CNPJ: {profile.cnpj}</p>}
-                </div>
-                {profile.address && <p className="text-xs text-gray-400 mt-1">{profile.address}</p>}
+                {profile.cnpj && <p className="text-sm text-gray-500">CNPJ: {profile.cnpj}</p>}
+                {profile.phone && <p className="text-sm text-gray-500">Telefone: {profile.phone}</p>}
+                {profile.address && <p className="text-sm text-gray-500">Endereço: {profile.address}</p>}
               </div>
             </div>
           )}
