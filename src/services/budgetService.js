@@ -263,13 +263,22 @@ export async function duplicateBudget(id) {
 export async function getPublicBudget(id) {
   const { data, error } = await supabase
     .from("budgets")
-    .select(`
-      id, display_id, client_name, client_address, items, total, validity_days, primary_color, created_at, status, is_public,
-      profiles!budgets_user_id_fkey(company_name, logo_url, phone, cnpj, plan_type)
-    `)
+    .select("id, display_id, client_name, client_address, items, total, validity_days, primary_color, created_at, status, is_public, user_id")
     .eq("id", id)
     .eq("is_public", true)
     .single();
   if (error) return null;
+
+  // Busca dados da empresa separadamente
+  if (data?.user_id) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("company_name, logo_url, phone, cnpj, plan_type")
+      .eq("id", data.user_id)
+      .single();
+    data.profiles = profile || null;
+    delete data.user_id;
+  }
+
   return data;
 }
