@@ -104,18 +104,35 @@ export default function PublicBudget() {
 
   const items = Array.isArray(budget.items) ? budget.items : [];
   const total = Number(budget.total || 0);
+  const profile = budget.profiles || {};
+  const isPro = profile.plan_type && profile.plan_type !== "free";
 
   return (
     <div className="min-h-screen bg-gray-100 py-8 px-4">
       <div className="max-w-2xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-6">
-          <p className="text-sm text-gray-500">Orçamento compartilhado via</p>
-          <Link to="/" className="text-blue-600 font-bold text-lg hover:underline">UltraOrça</Link>
+        <div className="text-center mb-4">
+          <p className="text-xs text-gray-400">Orçamento compartilhado via <Link to="/" className="text-blue-500 font-semibold hover:underline">UltraOrça</Link></p>
         </div>
 
         {/* Card */}
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+          {/* Dados da empresa */}
+          {profile.company_name && (
+            <div className="px-6 pt-5 pb-4 border-b border-gray-100 flex items-center gap-4">
+              {profile.logo_url && (
+                <img src={profile.logo_url} alt="Logo" className="h-14 w-14 rounded-xl object-contain border border-gray-100 bg-white shrink-0" />
+              )}
+              <div className="min-w-0">
+                <p className="font-bold text-gray-900 text-lg leading-tight">{profile.company_name}</p>
+                <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
+                  {profile.phone && <p className="text-sm text-gray-500">📞 {profile.phone}</p>}
+                  {profile.cnpj && <p className="text-sm text-gray-500">CNPJ: {profile.cnpj}</p>}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Cabeçalho colorido */}
           <div className="p-6 text-white" style={{ backgroundColor: primaryColor }}>
             <div className="flex justify-between items-start flex-wrap gap-3">
@@ -268,17 +285,19 @@ export default function PublicBudget() {
           </div>
         </div>
 
-        {/* CTA para novos usuários */}
-        <div className="mt-6 bg-blue-600 text-white rounded-2xl p-6 text-center">
-          <h3 className="font-bold text-lg mb-1">Crie orçamentos profissionais como este</h3>
-          <p className="text-blue-100 text-sm mb-4">Grátis para começar. Sem cartão.</p>
-          <Link
-            to="/register"
-            className="bg-white text-blue-600 font-bold px-6 py-2.5 rounded-xl hover:bg-blue-50 transition inline-block"
-          >
-            Criar minha conta grátis
-          </Link>
-        </div>
+        {/* CTA apenas para plano free */}
+        {!isPro && (
+          <div className="mt-6 bg-blue-600 text-white rounded-2xl p-6 text-center">
+            <h3 className="font-bold text-lg mb-1">Crie orçamentos profissionais como este</h3>
+            <p className="text-blue-100 text-sm mb-4">Grátis para começar. Sem cartão.</p>
+            <Link
+              to="/register"
+              className="bg-white text-blue-600 font-bold px-6 py-2.5 rounded-xl hover:bg-blue-50 transition inline-block"
+            >
+              Criar minha conta grátis
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   );

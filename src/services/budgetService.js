@@ -260,11 +260,13 @@ export async function duplicateBudget(id) {
 }
 
 // Busca um orçamento público por ID (sem autenticação)
-// Seleciona apenas as colunas necessárias para exibição — user_id e dados internos nunca são expostos
 export async function getPublicBudget(id) {
   const { data, error } = await supabase
     .from("budgets")
-    .select("id, display_id, client_name, client_address, items, total, validity_days, primary_color, created_at, status, is_public")
+    .select(`
+      id, display_id, client_name, client_address, items, total, validity_days, primary_color, created_at, status, is_public,
+      profiles!budgets_user_id_fkey(company_name, logo_url, phone, cnpj, plan_type)
+    `)
     .eq("id", id)
     .eq("is_public", true)
     .single();
