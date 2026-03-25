@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { getPublicBudget, acceptBudget } from "../services/budgetService";
+import { getPublicBudget, acceptBudget, rejectBudget } from "../services/budgetService";
 
 export default function PublicBudget() {
   const { id } = useParams();
@@ -9,6 +9,8 @@ export default function PublicBudget() {
   const [notFound, setNotFound] = useState(false);
   const [accepting, setAccepting] = useState(false);
   const [accepted, setAccepted] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [rejected, setRejected] = useState(false);
   const [expired, setExpired] = useState(false);
 
   useEffect(() => {
@@ -27,6 +29,7 @@ export default function PublicBudget() {
         } else {
           setBudget(data);
           if (data.status === "accepted") setAccepted(true);
+          if (data.status === "rejected") setRejected(true);
         }
       }
       setLoading(false);
@@ -45,6 +48,20 @@ export default function PublicBudget() {
       console.error("Erro ao aceitar orçamento:", e);
     } finally {
       setAccepting(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (rejected || rejecting) return;
+    setRejecting(true);
+    try {
+      await rejectBudget(id);
+      setRejected(true);
+      setBudget((prev) => ({ ...prev, status: "rejected" }));
+    } catch (e) {
+      console.error("Erro ao recusar orçamento:", e);
+    } finally {
+      setRejecting(false);
     }
   };
 
@@ -196,27 +213,50 @@ export default function PublicBudget() {
                       <p className="text-green-600 text-sm">O fornecedor foi notificado da sua aprovação.</p>
                     </div>
                   </div>
+                ) : rejected ? (
+                  <div className="flex items-center justify-center gap-3 bg-red-50 border border-red-200 rounded-xl p-5 text-center">
+                    <div className="text-3xl">❌</div>
+                    <div>
+                      <p className="font-bold text-red-700 text-lg">Orçamento recusado.</p>
+                      <p className="text-red-600 text-sm">O fornecedor foi notificado.</p>
+                    </div>
+                  </div>
                 ) : (
-                  <button
-                    onClick={handleAccept}
-                    disabled={accepting}
-                    className="w-full py-4 px-6 rounded-xl font-bold text-white text-lg flex items-center justify-center gap-3 transition active:scale-[0.98] shadow-lg"
-                    style={{ backgroundColor: accepting ? "#9ca3af" : "#16a34a" }}
-                  >
-                    {accepting ? (
-                      <>
-                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
-                        Processando...
-                      </>
-                    ) : (
-                      <>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
-                        Aceitar Orçamento
-                      </>
-                    )}
-                  </button>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleAccept}
+                      disabled={accepting || rejecting}
+                      className="flex-1 py-4 px-4 rounded-xl font-bold text-white text-base flex items-center justify-center gap-2 transition active:scale-[0.98] shadow-lg"
+                      style={{ backgroundColor: accepting ? "#9ca3af" : "#16a34a" }}
+                    >
+                      {accepting ? (
+                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                      ) : (
+                        <>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                          Aceitar
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={handleReject}
+                      disabled={accepting || rejecting}
+                      className="flex-1 py-4 px-4 rounded-xl font-bold text-white text-base flex items-center justify-center gap-2 transition active:scale-[0.98] shadow-lg bg-red-500 hover:bg-red-600"
+                    >
+                      {rejecting ? (
+                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                      ) : (
+                        <>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          Recusar
+                        </>
+                      )}
+                    </button>
+                  </div>
                 )}
               </div>
             )}

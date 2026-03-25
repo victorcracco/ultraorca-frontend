@@ -290,10 +290,6 @@ export default function NewBudget() {
   };
 
   const handleGenerateLink = async () => {
-    if (userPlan === "free") {
-      toast.warning("Link público é uma funcionalidade PRO. Faça upgrade para compartilhar orçamentos.");
-      return;
-    }
     if (!validateForm()) return;
     setLoadingLink(true);
     try {

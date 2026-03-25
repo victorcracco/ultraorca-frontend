@@ -207,6 +207,13 @@ export async function acceptBudget(id) {
   return data; // true se aceitou, false se já estava aceito ou não encontrado
 }
 
+// Recusa um orçamento público via RPC (sem autenticação necessária)
+export async function rejectBudget(id) {
+  const { data, error } = await supabase.rpc("reject_budget", { budget_id: id });
+  if (error) throw error;
+  return data;
+}
+
 export async function updateBudgetStatus(id, status) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Não autenticado");
