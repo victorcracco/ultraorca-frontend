@@ -15,6 +15,12 @@ dist-ssr
 .env.*
 !.env.example
 
+dev-dist
+
+# Carrosséis — gerados localmente, não sobem pro git
+carousels/output/
+carousels/.env
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

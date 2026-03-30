@@ -112,7 +112,11 @@ export default function Register() {
         }
       }
 
-      navigate("/app");
+      if (window.fbq) {
+        window.fbq('track', 'CompleteRegistration');
+      }
+
+      navigate("/app/new-budget");
 
     } catch (error) {
       console.error("Erro no cadastro:", error);

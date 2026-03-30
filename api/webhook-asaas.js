@@ -35,11 +35,23 @@ export default async function handler(req, res) {
       return res.status(200).json({ received: true });
     }
 
-    let planType = "pro";
-    if (payment.description && payment.description.toLowerCase().includes("starter"))
-      planType = "starter";
-    if (payment.description && payment.description.toLowerCase().includes("anual"))
-      planType = "annual";
+    // Busca o plano a partir da assinatura existente no banco — não depende do campo description
+    let planType = null;
+    if (subscriptionId) {
+      const { data: existingSub } = await supabase
+        .from("subscriptions")
+        .select("plan_type")
+        .eq("subscription_id", subscriptionId)
+        .maybeSingle();
+      planType = existingSub?.plan_type || null;
+    }
+    // Fallback: lê do description apenas se não encontrou no banco
+    if (!planType) {
+      const desc = (payment.description || "").toLowerCase();
+      if (desc.includes("starter")) planType = "starter";
+      else if (desc.includes("anual")) planType = "annual";
+      else planType = "pro";
+    }
 
     const { error } = await supabase
       .from("subscriptions")

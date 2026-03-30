@@ -13,7 +13,7 @@ export function setCors(res, req) {
   const isAllowed = allowedOrigins.includes(origin) || process.env.NODE_ENV !== "production";
 
   res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Access-Control-Allow-Origin", isAllowed ? origin : allowedOrigins[0] || "*");
+  res.setHeader("Access-Control-Allow-Origin", isAllowed ? origin : "https://ultraorca.com.br");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
 }

@@ -10,6 +10,7 @@ import PrivateRoute from "./components/PrivateRoute";
 
 // Páginas Públicas
 import LandingPage from "./pages/LandingPage";
+import LandingPageAds from "./pages/LandingPageAds";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -44,6 +45,7 @@ export default function App() {
       <Routes>
         {/* --- ROTAS PÚBLICAS --- */}
         <Route path="/" element={<LandingPage />} />
+        <Route path="/comecar" element={<LandingPageAds />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />

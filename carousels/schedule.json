@@ -1,0 +1,160 @@
+{
+  "config": {
+    "instagram_handle": "@ultraorcabr",
+    "post_days": ["tuesday", "thursday", "friday"],
+    "post_time_utc": "21:30",
+    "post_time_br": "18:30 (horário de Brasília)"
+  },
+  "posts": [
+    {
+      "id": 1,
+      "date": "2026-04-01",
+      "day": "wednesday",
+      "carousel": "carousel11",
+      "title": "Checklist antes de mandar o orçamento",
+      "type": "educativo",
+      "caption": "Salva esse post.\n\nAntes de mandar qualquer orçamento, confere se tem esses 6 itens. A maioria dos prestadores pula pelo menos 3 deles — e aí fica difícil de fechar.\n\nQual item você mais esquecia? Comenta aqui embaixo 👇\n\n#orcamento #eletricista #pintor #encanador #prestadordeservicos #dicas #negocio #autonomo #marceneiro #pedreiro",
+      "posted": false
+    },
+    {
+      "id": 2,
+      "date": "2026-04-03",
+      "day": "friday",
+      "carousel": "carousel3",
+      "title": "A fórmula para cobrar certo sua mão de obra",
+      "type": "educativo",
+      "caption": "Chega de cobrar no feeling e perder dinheiro.\n\nEssa fórmula tem 4 componentes — e a maioria dos autônomos ignora pelo menos 2 deles.\n\nSalva esse carrossel para usar quando precisar calcular. 💾\n\n#precificacao #maodeobra #prestadordeservicos #autonomo #eletricista #pintor #encanador #empreendedorismo #negocio #dicas",
+      "posted": false
+    },
+    {
+      "id": 3,
+      "date": "2026-04-07",
+      "day": "tuesday",
+      "carousel": "carousel9",
+      "title": "Quanto vale a sua hora?",
+      "type": "educativo",
+      "caption": "Você sabe exatamente quanto vale 1 hora do seu trabalho?\n\nSe a resposta for 'mais ou menos' — esse carrossel é pra você.\n\nTabela de referência de hora técnica por ofício no final. 👇\n\n#valorhora #precificacao #eletricista #encanador #pintor #marceneiro #autonomo #prestadordeservicos #financas #negocio",
+      "posted": false
+    },
+    {
+      "id": 4,
+      "date": "2026-04-09",
+      "day": "thursday",
+      "carousel": "carousel1",
+      "title": "Para de mandar preço assim no WhatsApp",
+      "type": "dor",
+      "caption": "Quantos clientes você perdeu por mandar preço no WhatsApp sem formatação?\n\nO orçamento que você envia é a primeira impressão que o cliente tem da sua empresa. Antes de ver seu trabalho, ele vê o papel.\n\nCom o UltraOrça você gera PDF profissional em menos de 1 minuto, direto do celular. Grátis para começar. Link na bio.\n\n#eletricista #encanador #pintor #prestadordeservicos #autonomo #orcamento #dicas #pequenaempresa #empreendedorismo",
+      "posted": false
+    },
+    {
+      "id": 5,
+      "date": "2026-04-11",
+      "day": "friday",
+      "carousel": "carousel2",
+      "title": "7 erros que fazem você perder clientes",
+      "type": "educativo",
+      "caption": "Todo autônomo comete pelo menos 3 desses erros.\n\nVocê comete quantos? Comenta o número aqui embaixo 👇\n\nSalva esse carrossel — vale reler antes de mandar o próximo orçamento.\n\n#prestadordeservicos #eletricista #pintor #encanador #autonomo #orcamento #dicasdenegocio #empreendedor #negocio",
+      "posted": false
+    },
+    {
+      "id": 6,
+      "date": "2026-04-14",
+      "day": "tuesday",
+      "carousel": "carousel7",
+      "title": "5 frases do cliente — e o que realmente significam",
+      "type": "relatable",
+      "caption": "Todo prestador já ouviu essas frases.\n\nNem todo mundo sabe o que está por trás de cada uma delas.\n\nQual você ouve mais? Comenta aqui 👇\n\n#prestadordeservicos #eletricista #pintor #encanador #autonomo #clientedificil #vendas #negocio #dicas",
+      "posted": false
+    },
+    {
+      "id": 7,
+      "date": "2026-04-16",
+      "day": "thursday",
+      "carousel": "carousel4",
+      "title": "Quanto você perdeu esse mês?",
+      "type": "dor",
+      "caption": "A maioria dos prestadores nunca para para calcular esse número.\n\nE quando calcula, assusta.\n\nUm cliente a mais por semana, fechado porque seu orçamento parece profissional — quanto isso representa por mês?\n\n#prestadordeservicos #autonomo #empreendedorismo #dinheiro #negocio #eletricista #pintor #encanador #financas",
+      "posted": false
+    },
+    {
+      "id": 8,
+      "date": "2026-04-18",
+      "day": "friday",
+      "carousel": "carousel5",
+      "title": "O cliente pediu desconto? Faça isso.",
+      "type": "vendas",
+      "caption": "Não o que você normalmente faz.\n\nQuem cede imediatamente perde a credibilidade — não só o dinheiro.\n\nTem uma resposta certa. E ela não é baixar o preço.\n\n#negociacao #prestadordeservicos #autonomo #vendas #eletricista #pintor #encanador #dicasdenegocio #empreendedor",
+      "posted": false
+    },
+    {
+      "id": 9,
+      "date": "2026-04-22",
+      "day": "wednesday",
+      "carousel": "carousel8",
+      "title": "Como fechar o serviço na primeira visita",
+      "type": "vendas",
+      "caption": "5 passos que separam quem fecha na hora de quem fica esperando o cliente 'pensar'.\n\nO passo 3 é o que mais faz diferença — e quase ninguém faz.\n\n#vendas #prestadordeservicos #autonomo #eletricista #pintor #encanador #negocio #empreendedorismo #dicas",
+      "posted": false
+    },
+    {
+      "id": 10,
+      "date": "2026-04-24",
+      "day": "friday",
+      "carousel": "carousel6",
+      "title": "Você cobra pelo trabalho ou pela insegurança?",
+      "type": "mentalidade",
+      "caption": "A maioria dos autônomos cobra baseado no medo de perder o cliente — não no valor real do serviço.\n\nVocê se identifica com algum desses sintomas?\n\n#mentalidade #prestadordeservicos #autonomo #precificacao #empreendedorismo #eletricista #pintor #encanador #negocio",
+      "posted": false
+    },
+    {
+      "id": 11,
+      "date": "2026-04-28",
+      "day": "tuesday",
+      "carousel": "carousel15",
+      "title": "De autônomo para empresa de verdade",
+      "type": "mentalidade",
+      "caption": "4 mudanças que separam quem trabalha por diária de quem constrói um negócio.\n\nNão é sobre ter CNPJ. É sobre como você pensa e se apresenta.\n\nQual dessas mudanças você ainda precisa fazer? Comenta 👇\n\n#mentalidade #empreendedorismo #autonomo #prestadordeservicos #negocio #eletricista #pintor #crescimento",
+      "posted": false
+    },
+    {
+      "id": 12,
+      "date": "2026-04-30",
+      "day": "thursday",
+      "carousel": "carousel14",
+      "title": "Como cobrar visita técnica sem perder o cliente",
+      "type": "educativo",
+      "caption": "Essa é uma das maiores dúvidas do autônomo.\n\nA resposta depende de como você apresenta — não do valor.\n\nTabela de referência de valores por ofício no slide 3. 👇\n\n#visitatecnica #prestadordeservicos #autonomo #eletricista #encanador #arCondicionado #negocio #dicas",
+      "posted": false
+    },
+    {
+      "id": 13,
+      "date": "2026-05-05",
+      "day": "tuesday",
+      "carousel": "carousel10",
+      "title": "O cliente sumiu depois do orçamento",
+      "type": "vendas",
+      "caption": "Não é o fim. Existe uma sequência certa para recuperar esse cliente sem parecer desesperado.\n\nScripts prontos nos slides 4 e 5 — copia e usa hoje mesmo. 📲\n\n#followup #prestadordeservicos #autonomo #vendas #eletricista #pintor #encanador #clientes #negocio",
+      "posted": false
+    },
+    {
+      "id": 14,
+      "date": "2026-05-07",
+      "day": "thursday",
+      "carousel": "carousel12",
+      "title": "Seu cliente aceita o orçamento por link",
+      "type": "produto",
+      "caption": "Chega de ficar esperando o cliente responder no WhatsApp.\n\nCom o UltraOrça o cliente acessa o orçamento pelo link, vê o PDF completo e clica 'Aceitar' — você recebe a notificação na hora.\n\nGrátis para começar. Link na bio 👆\n\n#ultraorca #prestadordeservicos #autonomo #orcamento #eletricista #pintor #encanador #tecnologia #negocio",
+      "posted": false
+    },
+    {
+      "id": 15,
+      "date": "2026-05-09",
+      "day": "friday",
+      "carousel": "carousel13",
+      "title": "R$ 29,99/mês — o que você ganha e o que perde sem",
+      "type": "produto",
+      "caption": "O plano custa R$ 29,99 por mês.\n\nQuantos serviços você perde por mês por não parecer profissional o suficiente?\n\nFaz a conta no slide 2. O número vai te surpreender.\n\nComeça grátis — sem cartão. Link na bio 👆\n\n#ultraorca #prestadordeservicos #autonomo #orcamento #roi #negocio #empreendedorismo #eletricista #pintor",
+      "posted": false
+    }
+  ]
+}

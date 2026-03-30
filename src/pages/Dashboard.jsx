@@ -142,6 +142,25 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* BANNER DE PRIMEIRO ACESSO */}
+      {!loading && budgets.length === 0 && (
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center gap-6">
+          <div className="text-5xl">🎉</div>
+          <div className="flex-1">
+            <h2 className="text-xl font-bold text-gray-900 mb-1">Conta criada! Agora crie seu primeiro orçamento.</h2>
+            <p className="text-gray-500 text-sm mb-4">Leva menos de 1 minuto. Coloque o nome do cliente, os serviços e gere o PDF ou link para enviar no WhatsApp.</p>
+            <div className="flex flex-wrap gap-4 text-sm text-gray-500 mb-5">
+              <span className="flex items-center gap-1.5"><span className="w-5 h-5 rounded-full bg-green-500 text-white flex items-center justify-center text-xs font-bold shrink-0">✓</span> Conta criada</span>
+              <span className="flex items-center gap-1.5"><span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold shrink-0">2</span> Criar primeiro orçamento</span>
+              <span className="flex items-center gap-1.5"><span className="w-5 h-5 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center text-xs font-bold shrink-0">3</span> Enviar para o cliente</span>
+            </div>
+            <Link to="/app/new-budget" className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl transition text-sm">
+              Criar meu primeiro orçamento →
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* GRADE DE AÇÕES */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <Link id="btn-new-budget" to="/app/new-budget" className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-lg hover:border-blue-200 transition-all flex flex-col items-center text-center group">

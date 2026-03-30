@@ -1,0 +1,69 @@
+name: Instagram Auto-Post
+
+on:
+  # Roda todo dia às 21:30 UTC = 18:30 horário de Brasília
+  schedule:
+    - cron: '30 21 * * *'
+
+  # Permite rodar manualmente pelo GitHub (Actions > Run workflow)
+  workflow_dispatch:
+    inputs:
+      date_override:
+        description: 'Forçar data específica (YYYY-MM-DD) — deixe vazio para usar hoje'
+        required: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repositório
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Instalar dependências
+        run: npm install playwright
+        working-directory: ./
+
+      - name: Instalar Chromium
+        run: npx playwright install chromium
+
+      - name: Gerar imagens dos carrosséis
+        run: node carousels/screenshot.cjs
+
+      - name: Sobrescrever data (se informada manualmente)
+        if: ${{ github.event.inputs.date_override != '' }}
+        run: echo "DATE_OVERRIDE=${{ github.event.inputs.date_override }}" >> $GITHUB_ENV
+
+      - name: Publicar no Instagram
+        run: |
+          if [ -n "$DATE_OVERRIDE" ]; then
+            # Simula a data para testes manuais
+            node -e "
+              const orig = Date;
+              globalThis.Date = class extends orig {
+                constructor(...args) { super(...args.length ? args : ['$DATE_OVERRIDE']); }
+                static now() { return new orig('$DATE_OVERRIDE').getTime(); }
+              };
+              Date.prototype.toISOString = function() { return orig.prototype.toISOString.call(this); };
+            " && node carousels/autopost.cjs
+          else
+            node carousels/autopost.cjs
+          fi
+        env:
+          IG_USER_ID:        ${{ secrets.IG_USER_ID }}
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          SUPABASE_URL:      ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:      ${{ secrets.SUPABASE_SERVICE_KEY }}
+
+      - name: Commit do schedule atualizado
+        run: |
+          git config --local user.email "github-actions@github.com"
+          git config --local user.name "GitHub Actions"
+          git add carousels/schedule.json
+          git diff --staged --quiet || git commit -m "chore: marca post do dia como publicado [skip ci]"
+          git push

@@ -205,7 +205,15 @@ export default function Subscription() {
       if (!response.ok) throw new Error(data.error || "Falha ao processar pagamento");
 
       if (data.invoiceUrl) {
-        window.location.href = data.invoiceUrl;
+        try {
+          const parsed = new URL(data.invoiceUrl);
+          if (!["www.asaas.com", "sandbox.asaas.com"].includes(parsed.hostname)) {
+            throw new Error("Domínio de pagamento não confiável.");
+          }
+          window.location.href = data.invoiceUrl;
+        } catch {
+          throw new Error("Link de pagamento inválido. Tente novamente.");
+        }
       } else {
         throw new Error("Link de pagamento não gerado. Tente novamente.");
       }
